@@ -42,4 +42,5 @@ for headings, paragraphs, and lists.
 - `_layouts/` — page templates
 - `_includes/sidebar.html` — generated topic navigation
 - `_config.yml` — Jekyll collection and site settings
+- `.github/workflows/jekyll.yml` — GitHub Pages build and deployment
 - `styles.css` — all site styling
