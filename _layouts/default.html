@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="{{ page.summary | default: site.description | escape }}"
+    />
+    <meta name="theme-color" content="#16243a" />
+    <title>
+      {% if page.title and page.title != "Home" %}{{ page.title | escape }} · {% endif %}{{ site.title | escape }}
+    </title>
+    <link rel="stylesheet" href="{{ '/styles.css' | relative_url }}" />
+
+    {% if page.math %}
+      <script>
+        window.MathJax = {
+          tex: {
+            inlineMath: { "[+]": [["$", "$"]] },
+            displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+            processEscapes: true
+          }
+        };
+      </script>
+      <script
+        defer
+        src="https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-chtml.js"
+      ></script>
+    {% endif %}
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="site-shell">
+      <aside class="sidebar">
+        {% include sidebar.html %}
+      </aside>
+
+      <main class="site-main" id="main-content">
+        <div class="content-frame">
+          {{ content }}
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const noteDrawer = document.querySelector(".nav-drawer");
+      const compactNavigation = window.matchMedia("(max-width: 52rem)");
+      const setNavigationMode = (query) => {
+        if (query.matches) {
+          noteDrawer.removeAttribute("open");
+        } else {
+          noteDrawer.setAttribute("open", "");
+        }
+      };
+
+      setNavigationMode(compactNavigation);
+      compactNavigation.addEventListener("change", setNavigationMode);
+    </script>
+  </body>
+</html>

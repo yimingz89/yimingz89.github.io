@@ -1,0 +1,44 @@
+<div class="sidebar-inner">
+  <a class="site-brand" href="{{ '/' | relative_url }}">
+    <span class="brand-mark" aria-hidden="true">∑</span>
+    <span class="brand-copy">
+      <strong>Yiming’s Math Notes</strong>
+      <small>Ideas &amp; arguments</small>
+    </span>
+  </a>
+
+  <details class="nav-drawer" open>
+    <summary>
+      Browse notes
+      <span class="drawer-icon" aria-hidden="true">⌄</span>
+    </summary>
+
+    <nav class="sidebar-nav" aria-label="Notes by topic">
+      {% assign topics = site.notes | map: "topic" | uniq | sort %}
+      {% for topic in topics %}
+        <section class="nav-group" aria-labelledby="nav-{{ topic | slugify }}">
+          <h2 class="nav-topic" id="nav-{{ topic | slugify }}">{{ topic }}</h2>
+          <ul class="nav-list">
+            {% assign topic_notes = site.notes | where: "topic", topic | sort: "order" %}
+            {% for note in topic_notes %}
+              <li>
+                <a
+                  class="sidebar-link{% if page.url == note.url %} is-active{% endif %}"
+                  href="{{ note.url | relative_url }}"
+                  {% if page.url == note.url %}aria-current="page"{% endif %}
+                >
+                  {{ note.title | escape }}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endfor %}
+    </nav>
+  </details>
+
+  <p class="sidebar-footer">
+    Markdown + LaTeX<br />
+    Rendered with MathJax
+  </p>
+</div>

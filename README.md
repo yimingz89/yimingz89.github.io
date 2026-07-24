@@ -1,28 +1,45 @@
-# yimingz89.github.io
+# Yiming's Math Notes
 
-This repository contains the personal website for Yiming Zheng, published at
+A topic-organized collection of math notes published at
 [https://yimingz89.github.io](https://yimingz89.github.io).
 
-## Make changes
+The site uses GitHub Pages and Jekyll. Notes are Markdown documents with LaTeX
+math rendered by MathJax.
 
-- Edit `index.html` to change the words and links.
-- Edit `styles.css` to change colors, spacing, and typography.
-- Edit `404.html` to customize the not-found page.
-- Commit changes to `main`; GitHub Pages will publish them automatically.
+## Add a note
 
-## Preview locally
+1. Create a Markdown file in `_notes/<topic>/<note-name>.md`.
+2. Add this front matter:
 
-From this directory, run:
+   ```yaml
+   ---
+   title: "Your note title"
+   topic: "Your topic"
+   summary: "One sentence describing the note."
+   order: 1
+   ---
+   ```
 
-```sh
-python3 -m http.server 8000
-```
+3. Write prose with Markdown and formulas with LaTeX delimiters:
 
-Then open [http://localhost:8000](http://localhost:8000).
+   ```markdown
+   Inline math looks like $e^{i\pi}+1=0$.
 
-## Add a custom domain
+   $$
+   \sum_{k=1}^{n} k = \frac{n(n+1)}{2}.
+   $$
+   ```
 
-GitHub documents the DNS records and repository settings required for a custom
-domain:
+4. Commit the file to `main`. GitHub Pages will rebuild the site and add the
+   note to the correct sidebar group automatically.
 
-<https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site>
+MathJax supports LaTeX math mode, not complete `.tex` documents. Use Markdown
+for headings, paragraphs, and lists.
+
+## Site structure
+
+- `_notes/` — note source files
+- `_layouts/` — page templates
+- `_includes/sidebar.html` — generated topic navigation
+- `_config.yml` — Jekyll collection and site settings
+- `styles.css` — all site styling

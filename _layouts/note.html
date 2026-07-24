@@ -1,0 +1,21 @@
+---
+layout: default
+---
+
+<article class="note">
+  <header class="note-header">
+    <p class="note-topic">{{ page.topic | escape }}</p>
+    <h1>{{ page.title | escape }}</h1>
+    {% if page.summary %}
+      <p class="note-summary">{{ page.summary | escape }}</p>
+    {% endif %}
+  </header>
+
+  <div class="prose">
+    {{ content }}
+  </div>
+
+  <footer class="note-footer">
+    <a class="text-link" href="{{ '/' | relative_url }}">← Browse all notes</a>
+  </footer>
+</article>

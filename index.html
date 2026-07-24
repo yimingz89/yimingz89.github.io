@@ -1,52 +1,39 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="The personal website of Yiming Zheng."
-    />
-    <meta name="theme-color" content="#f4efe6" />
-    <title>Yiming Zheng</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="page-shell">
-      <header class="site-header">
-        <a class="monogram" href="/" aria-label="Yiming Zheng, home">YZ</a>
-        <a
-          class="header-link"
-          href="https://github.com/yimingz89"
-          rel="me"
-        >
-          GitHub
-          <span aria-hidden="true">↗</span>
-        </a>
-      </header>
+---
+layout: default
+title: Home
+---
 
-      <main>
-        <section class="hero" aria-labelledby="page-title">
-          <p class="eyebrow">
-            <span class="status-dot" aria-hidden="true"></span>
-            The site is live
-          </p>
-          <h1 id="page-title">Hello, I’m<br />Yiming Zheng.</h1>
-          <p class="intro">
-            I’m building my new home on the web. Check back soon—or find me on
-            GitHub in the meantime.
-          </p>
-          <a class="button" href="https://github.com/yimingz89">
-            View my GitHub
-            <span aria-hidden="true">→</span>
+<section class="home-hero">
+  <p class="eyebrow">A growing notebook</p>
+  <h1>Math, one idea<br />at a time.</h1>
+  <p class="home-intro">
+    Short notes, worked arguments, and useful patterns—written to make the next
+    encounter with an idea feel familiar.
+  </p>
+</section>
+
+<section class="note-index" aria-labelledby="browse-notes">
+  <div class="section-heading">
+    <h2 id="browse-notes">Browse the notes</h2>
+    <p>{{ site.notes | size }} notes across {{ site.notes | map: "topic" | uniq | size }} topics</p>
+  </div>
+
+  {% assign topics = site.notes | map: "topic" | uniq | sort %}
+  {% for topic in topics %}
+    <section class="topic-section" aria-labelledby="topic-{{ topic | slugify }}">
+      <p class="topic-label" id="topic-{{ topic | slugify }}">{{ topic }}</p>
+      <div class="note-grid">
+        {% assign topic_notes = site.notes | where: "topic", topic | sort: "order" %}
+        {% for note in topic_notes %}
+          <a class="note-card" href="{{ note.url | relative_url }}">
+            <span>
+              <strong>{{ note.title | escape }}</strong>
+              <small>{{ note.summary | escape }}</small>
+            </span>
+            <span class="card-arrow" aria-hidden="true">→</span>
           </a>
-        </section>
-      </main>
-
-      <footer class="site-footer">
-        <p>Built with plain HTML and CSS.</p>
-        <p>Hosted on GitHub Pages.</p>
-      </footer>
-    </div>
-  </body>
-</html>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</section>

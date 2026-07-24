@@ -1,0 +1,25 @@
+title: "Yiming's Math Notes"
+description: "Short math notes, worked arguments, and useful patterns."
+url: "https://yimingz89.github.io"
+baseurl: ""
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  math_engine: mathjax
+
+collections:
+  notes:
+    output: true
+    permalink: /notes/:path/
+
+defaults:
+  - scope:
+      path: ""
+      type: notes
+    values:
+      layout: note
+      math: true
+
+exclude:
+  - README.md
