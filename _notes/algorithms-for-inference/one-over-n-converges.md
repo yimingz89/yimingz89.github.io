@@ -1,6 +1,6 @@
 ---
 title: "Proving That 1/n Converges to Zero"
-topic: "Analysis"
+topic: "Algorithms for Inference"
 summary: "A direct epsilon proof that the sequence 1/n tends to zero."
 order: 1
 ---

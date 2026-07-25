@@ -1,6 +1,6 @@
 ---
 title: "The Finite Geometric Series"
-topic: "Algebra"
+topic: "Inference and Information"
 summary: "A short derivation of the formula for a finite geometric sum."
 order: 1
 ---

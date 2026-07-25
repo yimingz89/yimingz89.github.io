@@ -1,6 +1,6 @@
-# Yiming's Math Notes
+# Yiming's Mathematics Notes
 
-A topic-organized collection of math notes published at
+A collection of concise mathematics notes published at
 [https://yimingz89.github.io](https://yimingz89.github.io).
 
 The site uses GitHub Pages and Jekyll. Notes are Markdown documents with LaTeX
