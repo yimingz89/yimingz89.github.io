@@ -400,6 +400,57 @@ a {
   background: transparent;
 }
 
+.proof-disclosure {
+  margin: 2.25rem 0;
+  border-block: 1px solid var(--line);
+}
+
+.proof-disclosure > summary {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.proof-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.proof-disclosure > summary::after {
+  content: "+";
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.proof-disclosure[open] > summary::after {
+  content: "−";
+}
+
+.proof-body {
+  padding: 0.15rem 0 1.35rem;
+  color: #3e4852;
+  font-size: 0.96em;
+}
+
+.proof-body > :first-child {
+  margin-top: 0;
+}
+
+.proof-body > :last-child {
+  margin-bottom: 0;
+}
+
 .note-footer {
   margin-top: clamp(3.5rem, 8vw, 6rem);
   padding-top: 1.25rem;
