@@ -312,5 +312,5 @@ $$
 $$
 
 - $Dg$ is the local linear approximation to $g$.
-- $|\det Dg|$ is its local volume expansion factor.
+- $\lvert\det Dg\rvert$ is its local volume expansion factor.
 - The inverse determinant appears because probability mass is conserved.
