@@ -180,6 +180,94 @@ $$
 }.
 $$
 
+The identity used below is
+
+$$
+\boxed{\det(AB)=\det(A)\det(B)}.
+$$
+
+<details class="proof-disclosure">
+  <summary>Proof that the determinant is multiplicative</summary>
+  <div class="proof-body" markdown="1">
+
+Let the columns of $B$ be $\mathbf b_1,\ldots,\mathbf b_n$. Then the columns
+of $AB$ are $A\mathbf b_1,\ldots,A\mathbf b_n$.
+
+Fix $A$ and define
+
+$$
+F(\mathbf v_1,\ldots,\mathbf v_n)
+=
+\det(A\mathbf v_1,\ldots,A\mathbf v_n).
+$$
+
+Because $A$ is linear and the determinant is alternating and multilinear in
+its columns, $F$ is also alternating and multilinear.
+
+We first show that every alternating multilinear function $F$ satisfies
+
+$$
+F(\mathbf v_1,\ldots,\mathbf v_n)
+=
+F(\mathbf e_1,\ldots,\mathbf e_n)
+\det[\mathbf v_1\ \cdots\ \mathbf v_n].
+$$
+
+Write $\mathbf v_j=\sum_i v_{ij}\mathbf e_i$. Multilinearity gives
+
+$$
+F(\mathbf v_1,\ldots,\mathbf v_n)
+=
+\sum_{i_1,\ldots,i_n}
+\left(\prod_{j=1}^n v_{i_jj}\right)
+F(\mathbf e_{i_1},\ldots,\mathbf e_{i_n}).
+$$
+
+Terms with a repeated index vanish because $F$ is alternating. Every
+remaining index tuple is a permutation $\sigma$ of $1,\ldots,n$, and swapping
+two arguments changes the sign, so
+
+$$
+F(\mathbf e_{\sigma(1)},\ldots,\mathbf e_{\sigma(n)})
+=
+\operatorname{sgn}(\sigma)F(\mathbf e_1,\ldots,\mathbf e_n).
+$$
+
+Therefore
+
+$$
+\begin{aligned}
+F(\mathbf v_1,\ldots,\mathbf v_n)
+&=
+F(\mathbf e_1,\ldots,\mathbf e_n)
+\sum_{\sigma\in S_n}
+\operatorname{sgn}(\sigma)
+\prod_{j=1}^n v_{\sigma(j),j}\\
+&=
+F(\mathbf e_1,\ldots,\mathbf e_n)
+\det[\mathbf v_1\ \cdots\ \mathbf v_n].
+\end{aligned}
+$$
+
+Apply this result to the columns of $B$:
+
+$$
+\begin{aligned}
+\det(AB)
+&=
+F(\mathbf b_1,\ldots,\mathbf b_n)\\
+&=
+F(\mathbf e_1,\ldots,\mathbf e_n)\det(B)\\
+&=
+\det(A\mathbf e_1,\ldots,A\mathbf e_n)\det(B)\\
+&=
+\det(A)\det(B).
+\end{aligned}
+$$
+
+  </div>
+</details>
+
 <details class="proof-disclosure">
   <summary>Proof of the determinant-of-an-inverse identity</summary>
   <div class="proof-body" markdown="1">
