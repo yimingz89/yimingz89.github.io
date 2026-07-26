@@ -26,7 +26,7 @@ p_{\mathbf Z}(\mathbf z)
 =
 p_{\mathbf U}\!\left(g^{-1}(\mathbf z)\right)
 \left|
-\det Dg^{-1}(\mathbf z)
+\det D(g^{-1})(\mathbf z)
 \right|
 }.
 $$
@@ -55,7 +55,7 @@ $$
 When $\mathbf z=g(\mathbf u)$, the inverse-function theorem gives
 
 $$
-Dg^{-1}(\mathbf z)
+D(g^{-1})(\mathbf z)
 =
 \left[Dg(\mathbf u)\right]^{-1}.
 $$
@@ -83,7 +83,7 @@ $\mathbf u=g^{-1}(\mathbf z)$. The corresponding volume elements satisfy
 $$
 d\mathbf u
 =
-\left|\det Dg^{-1}(\mathbf z)\right|
+\left|\det D(g^{-1})(\mathbf z)\right|
 d\mathbf z.
 $$
 
@@ -94,7 +94,7 @@ $$
 =
 \int_B
 p_{\mathbf U}\!\left(g^{-1}(\mathbf z)\right)
-\left|\det Dg^{-1}(\mathbf z)\right|
+\left|\det D(g^{-1})(\mathbf z)\right|
 d\mathbf z.
 $$
 
@@ -156,7 +156,7 @@ with invertible $A$,
 $$
 Dg(\mathbf u)=A,
 \qquad
-Dg^{-1}(\mathbf z)=A^{-1}.
+D(g^{-1})(\mathbf z)=A^{-1}.
 $$
 
 Therefore
@@ -166,9 +166,64 @@ $$
 p_{\mathbf Z}(\mathbf z)
 =
 p_{\mathbf U}\!\left(A^{-1}(\mathbf z-\mathbf b)\right)
-|\det A|^{-1}
+\lvert\det A\rvert^{-1}
 }.
 $$
+
+The inverse-Jacobian form uses the same factor because
+
+$$
+\boxed{
+\lvert\det A^{-1}\rvert
+=
+\lvert\det A\rvert^{-1}
+}.
+$$
+
+<details class="proof-disclosure">
+  <summary>Proof of the determinant-of-an-inverse identity</summary>
+  <div class="proof-body" markdown="1">
+
+Since $A$ is invertible,
+
+$$
+AA^{-1}=I.
+$$
+
+The determinant is multiplicative, so
+
+$$
+\begin{aligned}
+1
+&=
+\det I\\
+&=
+\det(AA^{-1})\\
+&=
+(\det A)(\det A^{-1}).
+\end{aligned}
+$$
+
+Because $\det A\neq0$, divide by $\det A$:
+
+$$
+\det A^{-1}
+=
+\frac{1}{\det A}.
+$$
+
+Taking absolute values gives
+
+$$
+\lvert\det A^{-1}\rvert
+=
+\frac{1}{\lvert\det A\rvert}
+=
+\lvert\det A\rvert^{-1}.
+$$
+
+  </div>
+</details>
 
 For example, if
 
