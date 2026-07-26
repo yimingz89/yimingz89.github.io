@@ -1,7 +1,7 @@
 ---
 title: "The Multivariate Gaussian Distribution"
 topic: "Algorithms for Inference"
-summary: "Four equivalent views of a jointly Gaussian random vector."
+summary: "Equivalent definitions, marginalization, and conditioning for Gaussian vectors."
 order: 1
 ---
 
@@ -26,8 +26,9 @@ Let $\mathbf x=(x_1,\ldots,x_n)^\mathsf T$. The most useful mental model is an
 affine image of independent standard Gaussians; the other definitions describe
 the same law from different viewpoints.
 
-For the four-way equivalence below, assume the distribution is
-**nondegenerate**: $\operatorname{Cov}(\mathbf x)\succ0$.
+**Definition 17.2 (jointly Gaussian).** For a **nondegenerate** random vector,
+the following four conditions are equivalent and define a jointly Gaussian
+collection. Here $\operatorname{Cov}(\mathbf x)\succ0$.
 
 1. **Affine construction.** For $\mathbf u\sim\mathcal N(\mathbf0,I_n)$,
 
@@ -38,13 +39,15 @@ For the four-way equivalence below, assume the distribution is
    where $A\in\mathbb R^{n\times n}$ is invertible and
    $\mathbf b\in\mathbb R^n$.
 
-2. **Linear projections.** Every linear combination
+2. **Linear projections.** For every $\mathbf a\neq\mathbf0$, the linear
+   combination
 
    $$
    \mathbf a^\mathsf T\mathbf x
    $$
 
-   is a scalar Gaussian. For $\mathbf a\neq\mathbf0$, its variance is positive.
+   is a scalar Gaussian with positive variance. The zero projection is treated
+   as a degenerate Gaussian.
 
 3. **Covariance form.** For
    $\boldsymbol\mu=\mathbb E[\mathbf x]$ and
@@ -63,7 +66,9 @@ For the four-way equivalence below, assume the distribution is
    $$
 
 4. **Information form.** For an information matrix
-   $J=J^\mathsf T\succ0$ and potential vector $\mathbf h$,
+   $J=J^\mathsf T\succ0$ and potential vector $\mathbf h$, we define
+   $\mathcal N^{-1}(J,\mathbf h):=\mathcal N(J^{-1}\mathbf h,J^{-1})$. Thus
+   $\mathbf x\sim\mathcal N^{-1}(J,\mathbf h)$ has density
 
    $$
    p_{\mathbf x}(\mathbf z)
@@ -105,11 +110,12 @@ $$
 All random-vector equalities below are equalities in distribution.
 
 **$1\Rightarrow2$.** If
-$\mathbf x\overset d=A\mathbf u+\mathbf b$, then for every $\mathbf a$,
+$\mathbf x\overset{d}=A\mathbf u+\mathbf b$, then for every
+$\mathbf a\neq\mathbf0$,
 
 $$
 \mathbf a^\mathsf T\mathbf x
-\overset d=
+\overset{d}=
 (A^\mathsf T\mathbf a)^\mathsf T\mathbf u
 +\mathbf a^\mathsf T\mathbf b
 \sim
@@ -149,7 +155,7 @@ $A\mathbf u+\boldsymbol\mu$ has the same characteristic function as
 $\mathbf x$. Uniqueness of characteristic functions gives
 
 $$
-\mathbf x\overset d=A\mathbf u+\boldsymbol\mu.
+\mathbf x\overset{d}=A\mathbf u+\boldsymbol\mu.
 $$
 
 Since $\Sigma\succ0$, $A$ is invertible.
@@ -253,3 +259,320 @@ $$
 \qquad
 \Sigma=AA^\mathsf T.
 $$
+
+## 17.3 Inference with Jointly Gaussian Variables
+
+Partition a jointly Gaussian vector into
+$\mathbf x_1\in\mathbb R^p$ and $\mathbf x_2\in\mathbb R^q$:
+
+$$
+\mathbf x
+=
+\begin{bmatrix}
+\mathbf x_1\\
+\mathbf x_2
+\end{bmatrix},
+\qquad
+\boldsymbol\mu
+=
+\begin{bmatrix}
+\boldsymbol\mu_1\\
+\boldsymbol\mu_2
+\end{bmatrix},
+\qquad
+\Sigma
+=
+\begin{bmatrix}
+\Sigma_{11} & \Sigma_{12}\\
+\Sigma_{21} & \Sigma_{22}
+\end{bmatrix}.
+$$
+
+The same distribution in information form has
+
+$$
+\mathbf h
+=
+\begin{bmatrix}
+\mathbf h_1\\
+\mathbf h_2
+\end{bmatrix},
+\qquad
+J
+=
+\begin{bmatrix}
+J_{11} & J_{12}\\
+J_{21} & J_{22}
+\end{bmatrix},
+\qquad
+J=\Sigma^{-1},
+\qquad
+\mathbf h=J\boldsymbol\mu.
+$$
+
+### 17.3.1 Marginalization
+
+**Claim 17.1 (Gaussian marginal).** Marginalizing either block preserves
+Gaussianity. In covariance form, simply keep the relevant mean and covariance
+blocks:
+
+$$
+\boxed{
+\mathbf x_1\sim
+\mathcal N(\boldsymbol\mu_1,\Sigma_{11})
+}.
+$$
+
+In information form,
+
+$$
+\boxed{
+\mathbf x_1\sim
+\mathcal N^{-1}(J_{\mathrm m},\mathbf h_{\mathrm m})
+},
+$$
+
+where
+
+$$
+J_{\mathrm m}
+=
+J_{11}-J_{12}J_{22}^{-1}J_{21},
+\qquad
+\mathbf h_{\mathrm m}
+=
+\mathbf h_1-J_{12}J_{22}^{-1}\mathbf h_2.
+$$
+
+$J_{\mathrm m}$ is the Schur complement of $J_{22}$ in $J$; equivalently,
+$J_{\mathrm m}=\Sigma_{11}^{-1}$ and
+$\mathbf h_{\mathrm m}=J_{\mathrm m}\boldsymbol\mu_1$.
+
+<details class="proof-disclosure">
+  <summary>Proof of Claim 17.1: marginalization</summary>
+  <div class="proof-body" markdown="1">
+
+**Covariance form.** Let
+$P=\begin{bmatrix}I_p&0\end{bmatrix}$, so
+$\mathbf x_1=P\mathbf x$. A linear image of a jointly Gaussian vector is
+Gaussian, and
+
+$$
+\mathbb E[\mathbf x_1]
+=
+P\boldsymbol\mu
+=
+\boldsymbol\mu_1,
+\qquad
+\operatorname{Cov}(\mathbf x_1)
+=
+P\Sigma P^\mathsf T
+=
+\Sigma_{11}.
+$$
+
+Therefore
+$\mathbf x_1\sim\mathcal N(\boldsymbol\mu_1,\Sigma_{11})$.
+
+**Information form.** Integrate $\mathbf z_2$ out of the joint information
+kernel:
+
+$$
+\begin{aligned}
+p_{\mathbf x_1}(\mathbf z_1)
+&\propto
+\exp\!\left(
+  -\frac12\mathbf z_1^\mathsf T J_{11}\mathbf z_1
+  +\mathbf h_1^\mathsf T\mathbf z_1
+\right)\\
+&\quad{}\times
+\int_{\mathbb R^q}
+\exp\!\left[
+  -\frac12\mathbf z_2^\mathsf T J_{22}\mathbf z_2
+  +(\mathbf h_2-J_{21}\mathbf z_1)^\mathsf T\mathbf z_2
+\right]
+\,d\mathbf z_2.
+\end{aligned}
+$$
+
+For $K\succ0$, completing the square gives
+
+$$
+\int
+\exp\!\left(
+  -\frac12\mathbf z^\mathsf T K\mathbf z
+  +\mathbf g^\mathsf T\mathbf z
+\right)
+d\mathbf z
+\propto
+\exp\!\left(
+  \frac12\mathbf g^\mathsf T K^{-1}\mathbf g
+\right).
+$$
+
+Apply this with
+$\mathbf g=\mathbf h_2-J_{21}\mathbf z_1$. After expanding the resulting
+quadratic in $\mathbf z_1$,
+
+$$
+p_{\mathbf x_1}(\mathbf z_1)
+\propto
+\exp\!\left[
+  -\frac12\mathbf z_1^\mathsf T
+  \left(J_{11}-J_{12}J_{22}^{-1}J_{21}\right)
+  \mathbf z_1
+  +
+  \left(\mathbf h_1-J_{12}J_{22}^{-1}\mathbf h_2\right)^\mathsf T
+  \mathbf z_1
+\right].
+$$
+
+This is
+$\mathcal N^{-1}(J_{\mathrm m},\mathbf h_{\mathrm m})$. The Schur complement
+$J_{\mathrm m}$ is positive definite because $J\succ0$. Comparing with the
+covariance result also gives
+$J_{\mathrm m}=\Sigma_{11}^{-1}$ and
+$\mathbf h_{\mathrm m}=J_{\mathrm m}\boldsymbol\mu_1$.
+
+  </div>
+</details>
+
+### 17.3.2 Conditioning
+
+**Claim 17.2 (Gaussian conditional).** After observing
+$\mathbf x_2=\mathbf c$,
+
+$$
+\boxed{
+\mathbf x_1\mid\mathbf x_2=\mathbf c
+\sim
+\mathcal N(\boldsymbol\mu_{1\mid2},\Sigma_{1\mid2})
+},
+$$
+
+where
+
+$$
+\boldsymbol\mu_{1\mid2}
+=
+\boldsymbol\mu_1
++\Sigma_{12}\Sigma_{22}^{-1}
+(\mathbf c-\boldsymbol\mu_2),
+$$
+
+and
+
+$$
+\Sigma_{1\mid2}
+=
+\Sigma_{11}
+-\Sigma_{12}\Sigma_{22}^{-1}\Sigma_{21}.
+$$
+
+In information form, the same result is especially short:
+
+$$
+\boxed{
+\mathbf x_1\mid\mathbf x_2=\mathbf c
+\sim
+\mathcal N^{-1}
+\!\left(
+  J_{11},
+  \mathbf h_1-J_{12}\mathbf c
+\right)
+}.
+$$
+
+Equivalently,
+$\Sigma_{1\mid2}=J_{11}^{-1}$ and
+$\boldsymbol\mu_{1\mid2}=J_{11}^{-1}(\mathbf h_1-J_{12}\mathbf c)$.
+The conditional covariance does not depend on the observed value $\mathbf c$.
+
+<details class="proof-disclosure">
+  <summary>Proof of Claim 17.2: conditioning</summary>
+  <div class="proof-body" markdown="1">
+
+**Information form.** Fix $\mathbf x_2=\mathbf c$ in the joint information
+kernel. Since $\Sigma_{22}\succ0$, this gives the standard continuous version
+of the conditional density for every $\mathbf c\in\mathbb R^q$. Every term
+independent of $\mathbf z_1$ is absorbed into the conditional normalizer,
+leaving
+
+$$
+p(\mathbf z_1\mid\mathbf c)
+\propto
+\exp\!\left[
+  -\frac12\mathbf z_1^\mathsf T J_{11}\mathbf z_1
+  +(\mathbf h_1-J_{12}\mathbf c)^\mathsf T\mathbf z_1
+\right].
+$$
+
+Therefore the conditional information matrix is $J_{11}$ and its potential
+vector is $\mathbf h_1-J_{12}\mathbf c$.
+
+**Covariance form.** Define
+
+$$
+K=\Sigma_{12}\Sigma_{22}^{-1},
+\qquad
+\mathbf r
+=
+\mathbf x_1-\boldsymbol\mu_1
+-K(\mathbf x_2-\boldsymbol\mu_2).
+$$
+
+The pair $(\mathbf r,\mathbf x_2)$ is jointly Gaussian because it is a linear
+transformation of $\mathbf x$. Its cross-covariance is
+
+$$
+\operatorname{Cov}(\mathbf r,\mathbf x_2)
+=
+\Sigma_{12}-K\Sigma_{22}
+=
+0.
+$$
+
+Jointly Gaussian, uncorrelated blocks are independent: their covariance-form
+density has a block-diagonal covariance and factors. Also,
+
+$$
+\operatorname{Cov}(\mathbf r)
+=
+\Sigma_{11}
+-\Sigma_{12}\Sigma_{22}^{-1}\Sigma_{21}
+=
+\Sigma_{1\mid2}.
+$$
+
+Since
+
+$$
+\mathbf x_1
+=
+\boldsymbol\mu_1
++K(\mathbf x_2-\boldsymbol\mu_2)
++\mathbf r,
+$$
+
+conditioning on $\mathbf x_2=\mathbf c$ fixes the first two terms while the
+independent Gaussian residual keeps its original law. Hence
+
+$$
+\mathbf x_1\mid\mathbf x_2=\mathbf c
+\sim
+\mathcal N\!\left(
+  \boldsymbol\mu_1
+  +\Sigma_{12}\Sigma_{22}^{-1}
+   (\mathbf c-\boldsymbol\mu_2),
+  \,
+  \Sigma_{11}
+  -\Sigma_{12}\Sigma_{22}^{-1}\Sigma_{21}
+\right).
+$$
+
+  </div>
+</details>
+
+**Memory aid.** Marginalization is a block read in covariance form;
+conditioning is a block read plus a potential-vector update in information
+form. The opposite representation requires a Schur complement.
