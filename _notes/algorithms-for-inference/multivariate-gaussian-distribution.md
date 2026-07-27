@@ -1,7 +1,7 @@
 ---
 title: "The Multivariate Gaussian Distribution"
 topic: "Algorithms for Inference"
-summary: "Equivalent definitions, marginalization, and conditioning for Gaussian vectors."
+summary: "Gaussian parameterizations, inference operations, and independence structure."
 order: 1
 ---
 
@@ -576,3 +576,254 @@ $$
 **Memory aid.** Marginalization is a block read in covariance form;
 conditioning is a block read plus a potential-vector update in information
 form. The opposite representation requires a Schur complement.
+
+## 17.4 Independence Structure in Gaussian Distributions
+
+Continue with a nondegenerate Gaussian vector partitioned exhaustively into
+three blocks:
+
+$$
+\mathbf x
+=
+\begin{bmatrix}
+\mathbf x_1\\
+\mathbf x_2\\
+\mathbf x_3
+\end{bmatrix},
+\qquad
+\boldsymbol\mu
+=
+\begin{bmatrix}
+\boldsymbol\mu_1\\
+\boldsymbol\mu_2\\
+\boldsymbol\mu_3
+\end{bmatrix},
+\qquad
+\mathbf h
+=
+\begin{bmatrix}
+\mathbf h_1\\
+\mathbf h_2\\
+\mathbf h_3
+\end{bmatrix}.
+$$
+
+Its covariance and full precision matrices are
+
+$$
+\Sigma
+=
+\begin{bmatrix}
+\Sigma_{11} & \Sigma_{12} & \Sigma_{13}\\
+\Sigma_{21} & \Sigma_{22} & \Sigma_{23}\\
+\Sigma_{31} & \Sigma_{32} & \Sigma_{33}
+\end{bmatrix},
+$$
+
+and
+
+$$
+J
+=
+\Sigma^{-1}
+=
+\begin{bmatrix}
+J_{11} & J_{12} & J_{13}\\
+J_{21} & J_{22} & J_{23}\\
+J_{31} & J_{32} & J_{33}
+\end{bmatrix},
+\qquad
+\mathbf h=J\boldsymbol\mu.
+$$
+
+Write
+$\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2$ for marginal
+independence, and
+$\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2\mid\mathbf x_3$
+for conditional independence given $\mathbf x_3$. A zero block below means a
+zero matrix of the appropriate size.
+
+### 17.4.1 Marginal Independence
+
+**Theorem 17.1 (marginal independence).** For jointly Gaussian blocks,
+
+$$
+\boxed{
+\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2
+\quad\Longleftrightarrow\quad
+\Sigma_{12}=0
+}.
+$$
+
+**Intuition.** $\Sigma_{12}$ records their marginal cross-covariance. In a
+Gaussian law, no higher-order dependence remains after that block vanishes, so
+uncorrelated blocks are independent. This implication is special to Gaussian
+distributions.
+
+<details class="proof-disclosure">
+  <summary>Proof of Theorem 17.1: marginal independence</summary>
+  <div class="proof-body" markdown="1">
+
+First marginalize $\mathbf x_3$. Then
+$(\mathbf x_1,\mathbf x_2)$ is jointly Gaussian with covariance
+
+$$
+\begin{bmatrix}
+\Sigma_{11} & \Sigma_{12}\\
+\Sigma_{21} & \Sigma_{22}
+\end{bmatrix}.
+$$
+
+**Independence implies zero covariance.** If $\mathbf x_1$ and $\mathbf x_2$
+are independent, then
+
+$$
+\begin{aligned}
+\Sigma_{12}
+&=
+\mathbb E\!\left[
+  (\mathbf x_1-\boldsymbol\mu_1)
+  (\mathbf x_2-\boldsymbol\mu_2)^\mathsf T
+\right]\\
+&=
+\mathbb E[\mathbf x_1-\boldsymbol\mu_1]\,
+\mathbb E[\mathbf x_2-\boldsymbol\mu_2]^\mathsf T
+=0.
+\end{aligned}
+$$
+
+**Zero covariance implies independence.** The characteristic function of the
+marginal pair is
+
+$$
+\begin{aligned}
+\varphi_{12}(\mathbf t_1,\mathbf t_2)
+=
+\exp\!\bigg(
+&i\mathbf t_1^\mathsf T\boldsymbol\mu_1
++i\mathbf t_2^\mathsf T\boldsymbol\mu_2
+-\frac12\mathbf t_1^\mathsf T\Sigma_{11}\mathbf t_1\\
+&-\mathbf t_1^\mathsf T\Sigma_{12}\mathbf t_2
+-\frac12\mathbf t_2^\mathsf T\Sigma_{22}\mathbf t_2
+\bigg).
+\end{aligned}
+$$
+
+When $\Sigma_{12}=0$, this factors as
+
+$$
+\varphi_{12}(\mathbf t_1,\mathbf t_2)
+=
+\varphi_1(\mathbf t_1)\varphi_2(\mathbf t_2).
+$$
+
+A joint characteristic function factors exactly when the corresponding random
+vectors are independent.
+
+  </div>
+</details>
+
+### 17.4.2 Conditional Independence
+
+**Theorem 17.2 (conditional independence).** For the exhaustive three-block
+partition above,
+
+$$
+\boxed{
+\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2
+\mid\mathbf x_3
+\quad\Longleftrightarrow\quad
+J_{12}=0
+}.
+$$
+
+Here $J_{12}$ is a block of the **full** precision matrix, not the precision of
+the marginal pair $(\mathbf x_1,\mathbf x_2)$.
+
+Equivalently, the conditional cross-covariance vanishes:
+
+$$
+\Sigma_{12\mid3}
+=
+\Sigma_{12}
+-\Sigma_{13}\Sigma_{33}^{-1}\Sigma_{32}
+=0.
+$$
+
+**Intuition.** Once $\mathbf x_3$ is fixed, $J_{12}$ is the only quadratic
+term coupling $\mathbf x_1$ and $\mathbf x_2$. If it vanishes, the conditional
+density separates into one factor for each block.
+
+<details class="proof-disclosure">
+  <summary>Proof of Theorem 17.2: conditional independence</summary>
+  <div class="proof-body" markdown="1">
+
+Fix $\mathbf x_3=\mathbf c$. Since the Gaussian density is positive, the
+standard conditional formula gives a continuous version for every
+$\mathbf c$. Discarding terms constant in
+$(\mathbf z_1,\mathbf z_2)$, the conditional log density is
+
+$$
+\begin{aligned}
+\log p(\mathbf z_1,\mathbf z_2\mid\mathbf c)
+={}&
+\text{constant}
+-\frac12\mathbf z_1^\mathsf T J_{11}\mathbf z_1
+-\mathbf z_1^\mathsf T J_{12}\mathbf z_2\\
+&-\frac12\mathbf z_2^\mathsf T J_{22}\mathbf z_2
++(\mathbf h_1-J_{13}\mathbf c)^\mathsf T\mathbf z_1\\
+&+(\mathbf h_2-J_{23}\mathbf c)^\mathsf T\mathbf z_2.
+\end{aligned}
+$$
+
+**If $J_{12}=0$.** The exponent is a sum of a
+$\mathbf z_1$-only function and a $\mathbf z_2$-only function. The normalizer
+also factors, so
+
+$$
+p(\mathbf z_1,\mathbf z_2\mid\mathbf c)
+=
+p(\mathbf z_1\mid\mathbf c)\,
+p(\mathbf z_2\mid\mathbf c).
+$$
+
+Thus $\mathbf x_1$ and $\mathbf x_2$ are conditionally independent given
+$\mathbf x_3$.
+
+**Only if.** Conditional independence makes the log density a sum of separate
+$\mathbf z_1$- and $\mathbf z_2$-functions, so its mixed derivative is zero.
+But the Gaussian log density above gives
+
+$$
+\frac{\partial}{\partial\mathbf z_2^\mathsf T}
+\nabla_{\mathbf z_1}
+\log p(\mathbf z_1,\mathbf z_2\mid\mathbf c)
+=
+-J_{12}.
+$$
+
+Therefore $J_{12}=0$.
+
+Finally, §17.3.2 gives the conditional covariance of
+$(\mathbf x_1,\mathbf x_2)$ given $\mathbf x_3$. Its off-diagonal block is
+
+$$
+\Sigma_{12\mid3}
+=
+\Sigma_{12}
+-\Sigma_{13}\Sigma_{33}^{-1}\Sigma_{32}.
+$$
+
+The conditional distribution is Gaussian, so Theorem 17.1 also shows that
+conditional independence is equivalent to $\Sigma_{12\mid3}=0$.
+
+  </div>
+</details>
+
+**General form.** A zero block $J_{AB}$ in a Gaussian precision matrix means
+$\mathbf x_A$ and $\mathbf x_B$ are conditionally independent given every
+remaining coordinate.
+
+**Memory aid.** Zeros in $\Sigma$ answer “independent?”; zeros in
+$J=\Sigma^{-1}$ answer “independent after the rest is known?” The two sparsity
+patterns generally differ.
