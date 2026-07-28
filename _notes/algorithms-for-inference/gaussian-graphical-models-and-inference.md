@@ -1,7 +1,7 @@
 ---
 title: "Gaussian Graphical Models and Inference"
 topic: "Algorithms for Inference"
-summary: "Gaussian Markov processes, linear dynamical systems, and innovation representations."
+summary: "Gaussian Markov processes, innovation representations, and Gaussian message passing."
 order: 2
 ---
 
@@ -231,3 +231,292 @@ $$
 
 **Memory aid.** Gaussianity makes the one-step predictor affine; the Markov
 property makes each prediction error independent of the entire past.
+
+## 18.1 Preliminary Example: The Two-Node Case
+
+Consider two Gaussian blocks joined by one edge:
+$\mathbf x_1\text{—}\mathbf x_2$. The entire message-passing idea is already
+visible here:
+
+$$
+\boxed{
+\begin{aligned}
+\text{eliminate node 2}
+&=
+\text{integrate out }\mathbf x_2\\
+&=
+\text{send its effect to node 1}.
+\end{aligned}
+}
+$$
+
+Let $\mathbf x_1\in\mathbb R^p$ and $\mathbf x_2\in\mathbb R^q$, with
+
+$$
+\begin{bmatrix}
+\mathbf x_1\\
+\mathbf x_2
+\end{bmatrix}
+\sim
+\mathcal N^{-1}(J,\mathbf h),
+\qquad
+J
+=
+\begin{bmatrix}
+J_{11} & J_{12}\\
+J_{21} & J_{22}
+\end{bmatrix},
+\qquad
+\mathbf h
+=
+\begin{bmatrix}
+\mathbf h_1\\
+\mathbf h_2
+\end{bmatrix},
+\qquad
+J=J^\mathsf T\succ0,
+\quad
+J_{21}=J_{12}^\mathsf T.
+$$
+
+Here
+$\mathcal N^{-1}(J,\mathbf h):=\mathcal N(J^{-1}\mathbf h,J^{-1})$.
+
+**Claim 18.1 (two-node Gaussian elimination).** Marginalizing
+$\mathbf x_2$ gives
+
+$$
+\boxed{
+\mathbf x_1
+\sim
+\mathcal N^{-1}(J_{\mathrm m},\mathbf h_{\mathrm m})
+},
+$$
+
+where
+
+$$
+\boxed{
+J_{\mathrm m}
+=
+J_{11}-J_{12}J_{22}^{-1}J_{21},
+\qquad
+\mathbf h_{\mathrm m}
+=
+\mathbf h_1-J_{12}J_{22}^{-1}\mathbf h_2.
+}
+$$
+
+This is the usual information-form Schur complement. We now reinterpret the
+same calculation as message passing.
+
+### Factorization and the Message
+
+Split the joint density into two node potentials and one edge potential:
+
+$$
+\begin{aligned}
+\phi_1(\mathbf x_1)
+&=
+\exp\left(
+  -\frac12\mathbf x_1^\mathsf T J_{11}\mathbf x_1
+  +\mathbf h_1^\mathsf T\mathbf x_1
+\right),\\
+\phi_2(\mathbf x_2)
+&=
+\exp\left(
+  -\frac12\mathbf x_2^\mathsf T J_{22}\mathbf x_2
+  +\mathbf h_2^\mathsf T\mathbf x_2
+\right),\\
+\psi_{12}(\mathbf x_1,\mathbf x_2)
+&=
+\exp\left(
+  -\mathbf x_1^\mathsf T J_{12}\mathbf x_2
+\right),
+\end{aligned}
+$$
+
+so
+
+$$
+p(\mathbf x_1,\mathbf x_2)
+\propto
+\phi_1(\mathbf x_1)
+\phi_2(\mathbf x_2)
+\psi_{12}(\mathbf x_1,\mathbf x_2).
+$$
+
+Eliminating node $2$ produces the sum-product message
+
+$$
+m_{2\to1}(\mathbf x_1)
+:=
+\int
+\phi_2(\mathbf x_2)
+\psi_{12}(\mathbf x_1,\mathbf x_2)
+\,d\mathbf x_2.
+$$
+
+The message has exponential-quadratic form
+
+$$
+m_{2\to1}(\mathbf x_1)
+\propto
+\exp\left(
+  -\frac12\mathbf x_1^\mathsf T
+  J_{2\to1}\mathbf x_1
+  +\mathbf h_{2\to1}^\mathsf T\mathbf x_1
+\right),
+$$
+
+with
+
+$$
+\boxed{
+J_{2\to1}
+=
+-J_{12}J_{22}^{-1}J_{21},
+\qquad
+\mathbf h_{2\to1}
+=
+-J_{12}J_{22}^{-1}\mathbf h_2.
+}
+$$
+
+The marginal at node $1$ is its local potential times the incoming message:
+
+$$
+p(\mathbf x_1)
+\propto
+\phi_1(\mathbf x_1)m_{2\to1}(\mathbf x_1).
+$$
+
+Multiplication adds canonical (natural) parameters:
+
+$$
+\boxed{
+J_{\mathrm m}=J_{11}+J_{2\to1},
+\qquad
+\mathbf h_{\mathrm m}=\mathbf h_1+\mathbf h_{2\to1}.
+}
+$$
+
+**Intuition.** Node $2$ packages its entire effect on node $1$ into one matrix
+and one vector. The matrix updates the quadratic term; the vector updates the
+linear term. This finite-dimensional closure is why Gaussian message passing
+reduces to linear algebra.
+
+The message is an unnormalized **potential**, not necessarily a probability
+density: $J_{2\to1}\preceq0$. Only after combining it with $\phi_1$ do we obtain
+the proper marginal precision $J_{\mathrm m}\succ0$. Message scale can be
+discarded when computing normalized marginals or MAP estimates, but not when
+computing the partition function or evidence.
+
+<details class="proof-disclosure">
+  <summary>Derivation of the two-node message and marginal</summary>
+  <div class="proof-body" markdown="1">
+
+Collect the terms involving $\mathbf x_2$:
+
+$$
+\begin{aligned}
+m_{2\to1}(\mathbf x_1)
+&=
+\int
+\exp\left[
+  -\frac12\mathbf x_2^\mathsf T J_{22}\mathbf x_2
+  +\mathbf h_2^\mathsf T\mathbf x_2
+  -\mathbf x_1^\mathsf T J_{12}\mathbf x_2
+\right]
+\,d\mathbf x_2\\
+&=
+\int
+\exp\left[
+  -\frac12\mathbf x_2^\mathsf T J_{22}\mathbf x_2
+  +(\mathbf h_2-J_{21}\mathbf x_1)^\mathsf T\mathbf x_2
+\right]
+\,d\mathbf x_2.
+\end{aligned}
+$$
+
+Since $J\succ0$, its principal block $J_{22}\succ0$. For any $K\succ0$,
+
+$$
+\int
+\exp\left(
+  -\frac12\mathbf z^\mathsf T K\mathbf z
+  +\mathbf g^\mathsf T\mathbf z
+\right)
+\,d\mathbf z
+\propto
+\exp\left(
+  \frac12\mathbf g^\mathsf T K^{-1}\mathbf g
+\right).
+$$
+
+Apply this with
+$\mathbf g=\mathbf h_2-J_{21}\mathbf x_1$:
+
+$$
+\begin{aligned}
+\log m_{2\to1}(\mathbf x_1)
+={}&
+\text{constant}
++\frac12
+(\mathbf h_2-J_{21}\mathbf x_1)^\mathsf T
+J_{22}^{-1}
+(\mathbf h_2-J_{21}\mathbf x_1)\\
+={}&
+\text{constant}
+-\mathbf x_1^\mathsf T
+J_{12}J_{22}^{-1}\mathbf h_2
++\frac12\mathbf x_1^\mathsf T
+J_{12}J_{22}^{-1}J_{21}
+\mathbf x_1.
+\end{aligned}
+$$
+
+Matching this with
+
+$$
+-\frac12\mathbf x_1^\mathsf T J_{2\to1}\mathbf x_1
++\mathbf h_{2\to1}^\mathsf T\mathbf x_1
+$$
+
+gives the displayed message parameters. Finally, multiplying by $\phi_1$
+adds the local and message parameters:
+
+$$
+\begin{aligned}
+J_{\mathrm m}
+&=
+J_{11}+J_{2\to1}
+=
+J_{11}-J_{12}J_{22}^{-1}J_{21},\\
+\mathbf h_{\mathrm m}
+&=
+\mathbf h_1+\mathbf h_{2\to1}
+=
+\mathbf h_1-J_{12}J_{22}^{-1}\mathbf h_2.
+\end{aligned}
+$$
+
+This is exactly the Schur-complement marginal in Claim 18.1.
+
+  </div>
+</details>
+
+**Memory aid.**
+
+$$
+\boxed{
+\begin{aligned}
+\text{eliminate a Gaussian node}
+&\Longrightarrow
+\text{send a matrix and vector},\\
+\text{multiply Gaussian potentials}
+&\Longrightarrow
+\text{add those parameters}.
+\end{aligned}
+}
+$$
