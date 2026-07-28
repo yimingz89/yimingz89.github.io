@@ -1,13 +1,18 @@
 ---
-title: "The Multivariate Gaussian Distribution"
+title: "1. The Multivariate Gaussian Distribution"
 topic: "Algorithms for Inference"
 summary: "Gaussian parameterizations, inference operations, and independence structure."
 order: 1
 ---
 
-## 17.1 Gaussian Random Variables
+This note collects the Gaussian facts used repeatedly in probabilistic
+inference. The key payoff is closure: linear transformations, marginalization,
+and conditioning stay Gaussian, so many probability calculations reduce to
+matrix algebra.
 
-**Definition 17.1.** A scalar random variable $X$ is Gaussian if, for some
+## 1.1 Gaussian Random Variables
+
+**Definition 1.1.** A scalar random variable $X$ is Gaussian if, for some
 $\mu\in\mathbb R$ and $\sigma>0$, its density is
 
 $$
@@ -20,13 +25,17 @@ $$
 Write $X\sim\mathcal N(\mu,\sigma^2)$. The case
 $\mathcal N(0,1)$ is the **standard Gaussian**.
 
-## 17.2 Jointly Gaussian Random Variables
+The scalar density fixes the notation. For inference, however, we need vectors:
+dependence must be described jointly, not one coordinate at a time.
 
-Let $\mathbf x=(x_1,\ldots,x_n)^\mathsf T$. The most useful mental model is an
-affine image of independent standard Gaussians; the other definitions describe
-the same law from different viewpoints.
+## 1.2 Jointly Gaussian Random Variables
 
-**Definition 17.2 (jointly Gaussian).** For a **nondegenerate** random vector,
+Let $\mathbf x=(x_1,\ldots,x_n)^\mathsf T$. Gaussian coordinates alone do not
+guarantee a jointly Gaussian vector; every linear combination must also be
+Gaussian. The equivalent views below serve different jobs: construction,
+moments, and factorization.
+
+**Definition 1.2 (jointly Gaussian).** For a **nondegenerate** random vector,
 the following four conditions are equivalent and define a jointly Gaussian
 collection. Here $\operatorname{Cov}(\mathbf x)\succ0$.
 
@@ -242,7 +251,7 @@ For a singular Gaussian, $\Sigma\succeq0$ and definitions 1–2 still work with 
 possibly noninvertible $A$. There is no density on all of $\mathbb R^n$, so
 definitions 3–4 must instead be interpreted on the affine support.
 
-## Quick Reference
+### 1.2.1 Parameterization Quick Reference
 
 - **Affine form:** sampling and geometric intuition.
 - **Projection form:** linear measurements and closure under linear maps.
@@ -260,7 +269,15 @@ $$
 \Sigma=AA^\mathsf T.
 $$
 
-## 17.3 Inference with Jointly Gaussian Variables
+No parameterization is universally best. Inference alternates between
+operations that are immediate in one form and require a Schur complement in
+the other.
+
+## 1.3 Inference with Jointly Gaussian Variables
+
+The two basic operations are **marginalization**, where variables are no longer
+tracked, and **conditioning**, where variables are observed. Gaussianity is
+preserved in both cases, but the easiest parameterization differs.
 
 Partition a jointly Gaussian vector into
 $\mathbf x_1\in\mathbb R^p$ and $\mathbf x_2\in\mathbb R^q$:
@@ -310,9 +327,9 @@ J=\Sigma^{-1},
 \mathbf h=J\boldsymbol\mu.
 $$
 
-### 17.3.1 Marginalization
+### 1.3.1 Marginalization
 
-**Claim 17.1 (Gaussian marginal).** Marginalizing either block preserves
+**Claim 1.1 (Gaussian marginal).** Marginalizing either block preserves
 Gaussianity. In covariance form, simply keep the relevant mean and covariance
 blocks:
 
@@ -349,7 +366,7 @@ $J_{\mathrm m}=\Sigma_{11}^{-1}$ and
 $\mathbf h_{\mathrm m}=J_{\mathrm m}\boldsymbol\mu_1$.
 
 <details class="proof-disclosure">
-  <summary>Proof of Claim 17.1: marginalization</summary>
+  <summary>Proof of Claim 1.1: marginalization</summary>
   <div class="proof-body" markdown="1">
 
 **Covariance form.** Let
@@ -437,9 +454,13 @@ $\mathbf h_{\mathrm m}=J_{\mathrm m}\boldsymbol\mu_1$.
   </div>
 </details>
 
-### 17.3.2 Conditioning
+Marginalization forgets $\mathbf x_2$ by integrating it out. Conditioning is
+different: an observed value of $\mathbf x_2$ is retained and used to update
+the distribution of $\mathbf x_1$.
 
-**Claim 17.2 (Gaussian conditional).** After observing
+### 1.3.2 Conditioning
+
+**Claim 1.2 (Gaussian conditional).** After observing
 $\mathbf x_2=\mathbf c$,
 
 $$
@@ -487,9 +508,11 @@ Equivalently,
 $\Sigma_{1\mid2}=J_{11}^{-1}$ and
 $\boldsymbol\mu_{1\mid2}=J_{11}^{-1}(\mathbf h_1-J_{12}\mathbf c)$.
 The conditional covariance does not depend on the observed value $\mathbf c$.
+The observation moves the conditional mean, while the amount of uncertainty
+removed is determined entirely by the covariance structure.
 
 <details class="proof-disclosure">
-  <summary>Proof of Claim 17.2: conditioning</summary>
+  <summary>Proof of Claim 1.2: conditioning</summary>
   <div class="proof-body" markdown="1">
 
 **Information form.** Fix $\mathbf x_2=\mathbf c$ in the joint information
@@ -577,7 +600,11 @@ $$
 conditioning is a block read plus a potential-vector update in information
 form. The opposite representation requires a Schur complement.
 
-## 17.4 Independence Structure in Gaussian Distributions
+## 1.4 Independence Structure in Gaussian Distributions
+
+Graphical models care not only about the marginal law, but also about which
+variables become independent once others are known. For Gaussians, marginal
+and conditional independence appear as zeros in two different matrices.
 
 Continue with a nondegenerate Gaussian vector partitioned exhaustively into
 three blocks:
@@ -643,9 +670,9 @@ $\mathbf x_1\mathrel{\perp\mkern-10mu\perp}\mathbf x_2\mid\mathbf x_3$
 for conditional independence given $\mathbf x_3$. A zero block below means a
 zero matrix of the appropriate size.
 
-### 17.4.1 Marginal Independence
+### 1.4.1 Marginal Independence
 
-**Theorem 17.1 (marginal independence).** For jointly Gaussian blocks,
+**Theorem 1.1 (marginal independence).** For jointly Gaussian blocks,
 
 $$
 \boxed{
@@ -661,7 +688,7 @@ uncorrelated blocks are independent. This implication is special to Gaussian
 distributions.
 
 <details class="proof-disclosure">
-  <summary>Proof of Theorem 17.1: marginal independence</summary>
+  <summary>Proof of Theorem 1.1: marginal independence</summary>
   <div class="proof-body" markdown="1">
 
 First marginalize $\mathbf x_3$. Then
@@ -723,9 +750,12 @@ vectors are independent.
   </div>
 </details>
 
-### 17.4.2 Conditional Independence
+Covariance answers the unconditional question. Once the remaining variables
+are fixed, direct coupling is instead read from the full precision matrix.
 
-**Theorem 17.2 (conditional independence).** For the exhaustive three-block
+### 1.4.2 Conditional Independence
+
+**Theorem 1.2 (conditional independence).** For the exhaustive three-block
 partition above,
 
 $$
@@ -755,7 +785,7 @@ term coupling $\mathbf x_1$ and $\mathbf x_2$. If it vanishes, the conditional
 density separates into one factor for each block.
 
 <details class="proof-disclosure">
-  <summary>Proof of Theorem 17.2: conditional independence</summary>
+  <summary>Proof of Theorem 1.2: conditional independence</summary>
   <div class="proof-body" markdown="1">
 
 Fix $\mathbf x_3=\mathbf c$. Since the Gaussian density is positive, the
@@ -804,7 +834,7 @@ $$
 
 Therefore $J_{12}=0$.
 
-Finally, §17.3.2 gives the conditional covariance of
+Finally, §1.3.2 gives the conditional covariance of
 $(\mathbf x_1,\mathbf x_2)$ given $\mathbf x_3$. Its off-diagonal block is
 
 $$
@@ -814,15 +844,21 @@ $$
 -\Sigma_{13}\Sigma_{33}^{-1}\Sigma_{32}.
 $$
 
-The conditional distribution is Gaussian, so Theorem 17.1 also shows that
+The conditional distribution is Gaussian, so Theorem 1.1 also shows that
 conditional independence is equivalent to $\Sigma_{12\mid3}=0$.
 
   </div>
 </details>
 
 **General form.** A zero block $J_{AB}$ in a Gaussian precision matrix means
-$\mathbf x_A$ and $\mathbf x_B$ are conditionally independent given every
-remaining coordinate.
+$\mathbf x_A$ and $\mathbf x_B$ are conditionally independent given all
+remaining coordinates jointly.
+
+This is the bridge to
+[Post 2: Gaussian Graphical Models and Inference](/notes/algorithms-for-inference/gaussian-graphical-models-and-inference/):
+a missing edge corresponds to a zero off-diagonal block of $J$. Precision
+sparsity records local conditional independence and lets inference exploit the
+graph rather than the full dense distribution.
 
 **Memory aid.** Zeros in $\Sigma$ answer “independent?”; zeros in
 $J=\Sigma^{-1}$ answer “independent after the rest is known?” The two sparsity

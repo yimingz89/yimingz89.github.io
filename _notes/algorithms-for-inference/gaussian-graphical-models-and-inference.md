@@ -1,17 +1,23 @@
 ---
-title: "Gaussian Graphical Models and Inference"
+title: "2. Gaussian Graphical Models and Inference"
 topic: "Algorithms for Inference"
 summary: "Gaussian Markov processes, innovation representations, and Gaussian message passing."
 order: 2
 ---
 
-## 17.6 Gaussian Markov Processes
+[Post 1: The Multivariate Gaussian Distribution](/notes/algorithms-for-inference/multivariate-gaussian-distribution/)
+developed Gaussian conditioning, marginalization, and independence in matrix
+form. Here we add graph structure. For a Gaussian chain, the Markov
+factorization is equivalent to an affine linear dynamical system. Eliminating
+one node then turns a Schur complement into a local message.
+
+## 2.1 Gaussian Markov Processes
 
 A Gauss–Markov process is a Gaussian distribution whose graphical structure is
 a chain. The same model can be read either as a factorized joint distribution
 or as a recursive sampling rule.
 
-**Definition 17.3 (Gauss–Markov process).** A jointly Gaussian sequence of
+**Definition 2.1 (Gauss–Markov process).** A jointly Gaussian sequence of
 fixed-dimensional states
 $\mathbf x_{1:N}=(\mathbf x_1,\ldots,\mathbf x_N)$, with
 $\operatorname{Cov}(\mathbf x_{1:N})\succ0$, is Gauss–Markov if
@@ -34,7 +40,10 @@ $$
 \mathbf x_i.
 $$
 
-**Definition 17.4 (affine linear dynamical system).** Let
+The factorization says what is conditionally independent. For generation and
+computation, it is useful to expose the fresh randomness at each step.
+
+**Definition 2.2 (affine linear dynamical system).** Let
 $\mathbf x_1$ be Gaussian and let
 
 $$
@@ -56,7 +65,11 @@ $$
 
 For centered states, $\mathbf b_i=0$, giving the usual linear form.
 
-**Fact 17.1 (past states and future innovations).** In this system,
+Each input contributes genuinely new information. The following fact
+formalizes that freshness and is the independence step that makes the
+recursion Markov.
+
+**Fact 2.1 (past states and future innovations).** In this system,
 
 $$
 (\mathbf x_1,\ldots,\mathbf x_i)
@@ -72,7 +85,7 @@ $\mathbf x_{i+1}$ is independent of
 $(\mathbf v_{i+1},\ldots,\mathbf v_{N-1})$.
 
 <details class="proof-disclosure">
-  <summary>Proof of Fact 17.1: past states and future innovations</summary>
+  <summary>Proof of Fact 2.1: past states and future innovations</summary>
   <div class="proof-body" markdown="1">
 
 Iterating the recursion shows that, for some affine function $f_i$,
@@ -91,7 +104,11 @@ therefore independent of the second.
   </div>
 </details>
 
-**Claim 17.3 (innovation representation).** A nondegenerate Gaussian sequence
+This is the key independence needed in one direction of the next result. The
+converse uses Gaussian conditioning to show that every one-step prediction
+error can itself serve as a fresh innovation.
+
+**Claim 2.1 (innovation representation).** A nondegenerate Gaussian sequence
 is Gauss–Markov if and only if it can be written as an affine linear dynamical
 system of the form above, with
 $\operatorname{Cov}(\mathbf x_1)\succ0$ and
@@ -146,7 +163,7 @@ covariance independent of the observed state. The Markov factorization then
 lets each transition be driven by a fresh independent Gaussian innovation.
 
 <details class="proof-disclosure">
-  <summary>Proof of Claim 17.3: innovation representation</summary>
+  <summary>Proof of Claim 2.1: innovation representation</summary>
   <div class="proof-body" markdown="1">
 
 **Dynamical system $\Rightarrow$ Gauss–Markov.** Every state is an affine
@@ -232,7 +249,14 @@ $$
 **Memory aid.** Gaussianity makes the one-step predictor affine; the Markov
 property makes each prediction error independent of the entire past.
 
-## 18.1 Preliminary Example: The Two-Node Case
+In information form, the same chain has a block-tridiagonal precision matrix:
+only neighboring states have cross-blocks. The innovation representation
+explains how the chain is generated; inference asks the complementary question:
+how can we eliminate an unobserved variable while retaining its complete effect
+on the variables that remain? The two-node calculation below is the atomic
+elimination step.
+
+## 2.2 Gaussian Elimination: The Two-Node Case
 
 Consider two Gaussian blocks joined by one edge:
 $\mathbf x_1\text{—}\mathbf x_2$. The entire message-passing idea is already
@@ -282,7 +306,7 @@ $$
 Here
 $\mathcal N^{-1}(J,\mathbf h):=\mathcal N(J^{-1}\mathbf h,J^{-1})$.
 
-**Claim 18.1 (two-node Gaussian elimination).** Marginalizing
+**Claim 2.2 (two-node Gaussian elimination).** Marginalizing
 $\mathbf x_2$ gives
 
 $$
@@ -307,10 +331,11 @@ J_{11}-J_{12}J_{22}^{-1}J_{21},
 }
 $$
 
-This is the usual information-form Schur complement. We now reinterpret the
-same calculation as message passing.
+This is the usual information-form Schur complement. To turn the same algebra
+into a local algorithm, factor the joint kernel and treat the eliminated
+node's contribution as a message across its only edge.
 
-### Factorization and the Message
+### 2.2.1 Factorization and the Message
 
 Split the joint density into two node potentials and one edge potential:
 
@@ -501,7 +526,7 @@ J_{11}-J_{12}J_{22}^{-1}J_{21},\\
 \end{aligned}
 $$
 
-This is exactly the Schur-complement marginal in Claim 18.1.
+This is exactly the Schur-complement marginal in Claim 2.2.
 
   </div>
 </details>
@@ -520,3 +545,9 @@ $$
 \end{aligned}
 }
 $$
+
+On a larger tree, a node sending to one neighbor combines its local potential
+with messages from every other neighbor, includes the connecting edge
+potential, and integrates out its own variable. The resulting matrix–vector
+pair is the outgoing message. Gaussian message passing is repeated local Schur
+complementation.
