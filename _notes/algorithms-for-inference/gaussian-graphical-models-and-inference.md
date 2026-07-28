@@ -28,7 +28,7 @@ Equivalently,
 
 $$
 \mathbf x_{i+1}
-\mathrel{\perp\!\!\!\perp}
+\mathrel{\perp\mkern-10mu\perp}
 \mathbf x_{1:i-1}
 \mid
 \mathbf x_i.
@@ -60,7 +60,7 @@ For centered states, $\mathbf b_i=0$, giving the usual linear form.
 
 $$
 (\mathbf x_1,\ldots,\mathbf x_i)
-\mathrel{\perp\!\!\!\perp}
+\mathrel{\perp\mkern-10mu\perp}
 (\mathbf v_i,\ldots,\mathbf v_{N-1}),
 \qquad
 i=1,\ldots,N-1.
@@ -203,7 +203,7 @@ $$
 $$
 
 This conditional law does not depend on $\mathbf x_{1:i}$, so
-$\boldsymbol\varepsilon_i\mathrel{\perp\!\!\!\perp}\mathbf x_{1:i}$. Every
+$\boldsymbol\varepsilon_i\mathrel{\perp\mkern-10mu\perp}\mathbf x_{1:i}$. Every
 earlier innovation is a function of $\mathbf x_{1:i}$; hence
 $\boldsymbol\varepsilon_i$ is independent of
 $(\mathbf x_1,\boldsymbol\varepsilon_1,\ldots,

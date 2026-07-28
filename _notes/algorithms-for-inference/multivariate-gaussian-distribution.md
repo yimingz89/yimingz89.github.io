@@ -637,9 +637,9 @@ J_{31} & J_{32} & J_{33}
 $$
 
 Write
-$\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2$ for marginal
+$\mathbf x_1\mathrel{\perp\mkern-10mu\perp}\mathbf x_2$ for marginal
 independence, and
-$\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2\mid\mathbf x_3$
+$\mathbf x_1\mathrel{\perp\mkern-10mu\perp}\mathbf x_2\mid\mathbf x_3$
 for conditional independence given $\mathbf x_3$. A zero block below means a
 zero matrix of the appropriate size.
 
@@ -649,7 +649,7 @@ zero matrix of the appropriate size.
 
 $$
 \boxed{
-\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2
+\mathbf x_1\mathrel{\perp\mkern-10mu\perp}\mathbf x_2
 \quad\Longleftrightarrow\quad
 \Sigma_{12}=0
 }.
@@ -730,7 +730,7 @@ partition above,
 
 $$
 \boxed{
-\mathbf x_1\mathrel{\perp\!\!\!\perp}\mathbf x_2
+\mathbf x_1\mathrel{\perp\mkern-10mu\perp}\mathbf x_2
 \mid\mathbf x_3
 \quad\Longleftrightarrow\quad
 J_{12}=0
