@@ -1,7 +1,7 @@
 ---
 title: "2. Gaussian Graphical Models and Inference"
 topic: "Algorithms for Inference"
-summary: "Gaussian Markov processes, innovations, precision factorization, and exact message passing on trees."
+summary: "Gaussian Markov processes, precision factorization, and graph-aware Gaussian elimination on trees."
 order: 2
 ---
 
@@ -1036,3 +1036,241 @@ $$
 \end{aligned}
 }
 $$
+
+## 2.5 Computational Complexity and Gaussian Elimination
+
+Assume a tree with $N$ nodes, each state has dimension $d$, and the local
+$d\times d$ matrices are dense. The important distinction is between the size
+of a **local** solve, $d$, and the size of the **global** system, $Nd$.
+
+**TL;DR.** Tree Gaussian BP computes every node marginal in $O(Nd^3)$ total,
+versus $O(N^3d^3)$ for a dense global solve, because each local elimination is
+cached and reused.
+
+### 2.5.1 Runtime on a tree
+
+A tree has $N-1$ edges and therefore $2(N-1)$ directed messages. For one
+message $i\to j$, write
+
+$$
+K=\bar J_{i\setminus j},
+\qquad
+\mathbf g=\bar{\mathbf h}_{i\setminus j}.
+$$
+
+The work is:
+
+1. **Collect the cavity parameters.** Adding dense $d\times d$ message
+   matrices costs $O(d^2)$ per addition; adding their vectors costs $O(d)$.
+   With cached node totals, aggregation over the whole tree costs
+   $O(Nd^2)$.
+2. **Factor the cavity precision.** A dense Cholesky factorization of
+   $K$ costs $O(d^3)$.
+3. **Compute both outgoing parameters.** Reuse that factorization to solve
+   $KX=J_{ij}$ and $K\mathbf y=\mathbf g$, then form
+
+   $$
+   J_{i\to j}=-J_{ji}X,
+   \qquad
+   \mathbf h_{i\to j}=-J_{ji}\mathbf y.
+   $$
+
+   The matrix right-hand side and matrix product keep the total at
+   $O(d^3)$ per message; the information-vector solve is only $O(d^2)$.
+
+Thus all directed messages require
+
+$$
+\boxed{
+2(N-1)\times O(d^3)=O(Nd^3).
+}
+$$
+
+The same factorization is used for both $J_{i\to j}$ and
+$\mathbf h_{i\to j}$; there is no second inverse. In practice, we solve the
+linear systems rather than forming $K^{-1}$ explicitly.
+
+Once the messages are available:
+
+- Forming every
+  $(\widehat J_i,\widehat{\mathbf h}_i)$ by adding incoming messages costs
+  $O(Nd^2)$ in total.
+- Computing each marginal mean directly from its completed
+  $(\widehat J_i,\widehat{\mathbf h}_i)$ costs $O(Nd^3)$ total. If only the
+  global mean is needed, cached elimination factors permit one root solve
+  followed by $O(Nd^2)$ back-substitution; the preceding elimination work
+  remains $O(Nd^3)$.
+- Explicitly recovering every marginal covariance
+  $\widehat J_i^{-1}$ also costs $O(Nd^3)$ total. If both means and
+  covariances are needed, the same local factorizations can be reused.
+
+Therefore the complete computation of all tree marginals is
+
+$$
+\boxed{
+O(Nd^3)\ \text{work}.
+}
+$$
+
+Storing the $O(N)$ directed matrix–vector messages costs $O(Nd^2)$.
+
+This is a total-work statement. With parallel updates, the number of sequential
+rounds is $O(\operatorname{diam}(\mathcal T))$: $O(N)$ for a chain and
+$O(\log N)$ for a balanced tree. The corresponding arithmetic on the critical
+path is $O(\operatorname{diam}(\mathcal T)d^3)$.
+
+### 2.5.2 Comparison with a naive dense solve
+
+Stacking every state produces a global information matrix of dimension
+$Nd\times Nd$. If its sparsity is ignored, classical dense factorization or
+matrix inversion costs
+
+$$
+\boxed{
+O\!\left((Nd)^3\right)
+=
+O(N^3d^3),
+}
+$$
+
+with $O((Nd)^2)=O(N^2d^2)$ storage. If only the mean is required, explicitly
+forming the inverse is unnecessary, but the dense factorization still has
+$O(N^3d^3)$ cost.
+
+Tree BP replaces one global $Nd\times Nd$ problem with $O(N)$ local
+$d\times d$ problems. The gain comes from sparsity and reuse, not from a new
+matrix identity.
+
+### 2.5.3 Gaussian BP is graph-aware Gaussian elimination
+
+The covariance and information forms satisfy
+
+$$
+J=\Lambda^{-1},
+\qquad
+\mathbf h=J\boldsymbol\mu.
+$$
+
+Therefore computing the mean is exactly the linear-system problem
+
+$$
+J\boldsymbol\mu=\mathbf h.
+$$
+
+**Claim 2.6 (BP message as block elimination).** Let
+$K=\bar J_{i\setminus j}$ and
+$\mathbf g=\bar{\mathbf h}_{i\setminus j}$. Eliminating node $i$ from the
+linear system updates node $j$ by
+
+$$
+\boxed{
+\Delta J_j
+=
+-J_{ji}K^{-1}J_{ij}
+=
+J_{i\to j},
+\qquad
+\Delta\mathbf h_j
+=
+-J_{ji}K^{-1}\mathbf g
+=
+\mathbf h_{i\to j}.
+}
+$$
+
+These are exactly the Gaussian BP message parameters. A message is the Schur
+complement contribution left behind when a node—or an already summarized
+subtree—is eliminated.
+
+<details class="proof-disclosure">
+  <summary>Derivation: one BP message is one block-elimination step</summary>
+  <div class="proof-body" markdown="1">
+
+After all other branches at $i$ have been summarized into $(K,\mathbf g)$,
+the relevant block equations are
+
+$$
+\begin{bmatrix}
+K & J_{ij}\\
+J_{ji} & J_{jj}
+\end{bmatrix}
+\begin{bmatrix}
+\boldsymbol\mu_i\\
+\boldsymbol\mu_j
+\end{bmatrix}
+=
+\begin{bmatrix}
+\mathbf g\\
+\mathbf h_j
+\end{bmatrix}.
+$$
+
+The first row gives
+
+$$
+\boldsymbol\mu_i
+=
+K^{-1}
+\left(
+  \mathbf g-J_{ij}\boldsymbol\mu_j
+\right).
+$$
+
+Substitute this into the second row:
+
+$$
+\left(
+  J_{jj}
+  -J_{ji}K^{-1}J_{ij}
+\right)
+\boldsymbol\mu_j
+=
+\mathbf h_j
+-J_{ji}K^{-1}\mathbf g.
+$$
+
+Equivalently,
+
+$$
+\left(
+  J_{jj}+J_{i\to j}
+\right)
+\boldsymbol\mu_j
+=
+\mathbf h_j+\mathbf h_{i\to j}.
+$$
+
+This is precisely what multiplying node $j$'s local potential by the incoming
+message does in information form.
+
+  </div>
+</details>
+
+The ordering is what preserves the computational advantage:
+
+- **Leaf-first elimination:** a leaf has only one remaining neighbor, so
+  eliminating it creates no new edge.
+- **Eliminating an interior node too early:** all its remaining neighbors
+  become mutually coupled. These new nonzero blocks are **fill-in** and make
+  later eliminations more expensive.
+- **Tree BP:** the collect pass automatically follows a leaf-to-root
+  elimination order and caches each eliminated subtree as a message. The
+  distribute pass reuses those summaries to recover every node marginal.
+
+Sparse Gaussian elimination with this ordering and Gaussian BP perform the
+same algebra. BP simply makes the graph structure, schedule, and reusable
+subtree summaries explicit.
+
+$$
+\boxed{
+\text{Gaussian BP on a tree}
+=
+\text{Gaussian elimination}
++
+\text{graph-aware ordering}.
+}
+$$
+
+On graphs with cycles, exact elimination generally creates fill-in. The size
+of the resulting intermediate cliques—not merely the number of nodes—controls
+the cost; this is the idea captured by treewidth.
