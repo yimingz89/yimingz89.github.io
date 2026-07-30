@@ -1,7 +1,7 @@
 ---
 title: "2. Gaussian Graphical Models and Inference"
 topic: "Algorithms for Inference"
-summary: "Gaussian Markov processes, innovation representations, and Gaussian message passing."
+summary: "Gaussian Markov processes, precision factorization, innovations, and message passing."
 order: 2
 ---
 
@@ -551,3 +551,186 @@ with messages from every other neighbor, includes the connecting edge
 potential, and integrates out its own variable. The resulting matrix–vector
 pair is the outgoing message. Gaussian message passing is repeated local Schur
 complementation.
+
+## 2.3 Gaussian Distribution Factorization
+
+The two-node decomposition is not special. Any Gaussian in information form
+separates into one potential for each node and one potential for each
+interacting pair. This turns the sparsity pattern of the precision matrix into
+a graph on which local inference can operate.
+
+Stack the block variables and information vector as
+
+$$
+\mathbf x
+=
+\begin{bmatrix}
+\mathbf x_1\\[-2pt]
+\vdots\\[-2pt]
+\mathbf x_N
+\end{bmatrix},
+\qquad
+\mathbf h
+=
+\begin{bmatrix}
+\mathbf h_1\\[-2pt]
+\vdots\\[-2pt]
+\mathbf h_N
+\end{bmatrix},
+$$
+
+and partition the symmetric precision matrix $J\succ0$ into blocks
+$J_{ij}$, so $J_{ji}=J_{ij}^{\mathsf T}$. Assume
+
+$$
+\mathbf x\sim\mathcal N^{-1}(J,\mathbf h).
+$$
+
+**Claim 2.3 (Gaussian pairwise factorization).** The joint density factors as
+
+$$
+\boxed{
+p(\mathbf x_{1:N})
+\propto
+\prod_{i=1}^N\phi_i(\mathbf x_i)
+\prod_{(i,j)\in\mathcal E}
+\psi_{ij}(\mathbf x_i,\mathbf x_j),
+}
+$$
+
+where
+
+$$
+\phi_i(\mathbf x_i)
+=
+\exp\left(
+  -\frac12\mathbf x_i^\mathsf T J_{ii}\mathbf x_i
+  +\mathbf h_i^\mathsf T\mathbf x_i
+\right)
+$$
+
+and
+
+$$
+\psi_{ij}(\mathbf x_i,\mathbf x_j)
+=
+\exp\left(
+  -\mathbf x_i^\mathsf T J_{ij}\mathbf x_j
+\right).
+$$
+
+The associated undirected graph has
+
+$$
+\mathcal V=\{1,\ldots,N\},
+\qquad
+\mathcal E
+=
+\{(i,j):i<j,\ J_{ij}\ne0\}.
+$$
+
+Thus a nonzero off-diagonal block creates an edge. If $J_{ij}=0$, its edge
+potential is identically one and can be omitted.
+
+<details class="proof-disclosure">
+  <summary>Derivation of the general Gaussian factorization</summary>
+  <div class="proof-body" markdown="1">
+
+Start from the information-form exponent:
+
+$$
+\log p(\mathbf x_{1:N})
+=
+\text{constant}
+-\frac12
+\sum_{i=1}^N\sum_{j=1}^N
+\mathbf x_i^\mathsf T J_{ij}\mathbf x_j
++
+\sum_{i=1}^N\mathbf h_i^\mathsf T\mathbf x_i.
+$$
+
+Separate the diagonal and off-diagonal terms:
+
+$$
+\begin{aligned}
+\log p(\mathbf x_{1:N})
+={}&
+\text{constant}
++
+\sum_{i=1}^N
+\left(
+  -\frac12\mathbf x_i^\mathsf T J_{ii}\mathbf x_i
+  +\mathbf h_i^\mathsf T\mathbf x_i
+\right)\\
+&-\frac12
+\sum_{i<j}
+\left(
+  \mathbf x_i^\mathsf T J_{ij}\mathbf x_j
+  +\mathbf x_j^\mathsf T J_{ji}\mathbf x_i
+\right).
+\end{aligned}
+$$
+
+Because $J_{ji}=J_{ij}^\mathsf T$ and each cross term is a scalar,
+
+$$
+\mathbf x_j^\mathsf T J_{ji}\mathbf x_i
+=
+\mathbf x_i^\mathsf T J_{ij}\mathbf x_j.
+$$
+
+Therefore
+
+$$
+\log p(\mathbf x_{1:N})
+=
+\text{constant}
++
+\sum_{i=1}^N
+\left(
+  -\frac12\mathbf x_i^\mathsf T J_{ii}\mathbf x_i
+  +\mathbf h_i^\mathsf T\mathbf x_i
+\right)
+-
+\sum_{i<j}
+\mathbf x_i^\mathsf T J_{ij}\mathbf x_j.
+$$
+
+Exponentiating converts the sum into the claimed product. Terms with
+$J_{ij}=0$ contribute the constant factor one, so only edges in $\mathcal E$
+need to be retained.
+
+  </div>
+</details>
+
+The factors are potentials, not necessarily normalized densities on their own.
+The complete product is normalizable because $J\succ0$.
+
+The graph is read from the **precision matrix**, not the covariance matrix. For
+a nondegenerate joint Gaussian,
+
+$$
+J_{ij}=0
+\quad\Longleftrightarrow\quad
+\mathbf x_i
+\mathrel{\perp\mkern-10mu\perp}
+\mathbf x_j
+\mid
+\mathbf x_{\mathcal V\setminus\{i,j\}}.
+$$
+
+So missing edges encode conditional independence given every other node. This
+is the structural bridge from a global Gaussian formula to a local algorithm:
+message passing only needs the factors adjacent to each node.
+
+**Memory aid.**
+
+$$
+\boxed{
+J_{ii}\longrightarrow\text{node potential},
+\qquad
+J_{ij}\ne0\longrightarrow\text{edge potential},
+\qquad
+J_{ij}=0\longrightarrow\text{missing edge}.
+}
+$$
