@@ -1,7 +1,7 @@
 ---
 title: "2. Gaussian Graphical Models and Inference"
 topic: "Algorithms for Inference"
-summary: "Gaussian Markov processes, precision factorization, and graph-aware Gaussian elimination on trees."
+summary: "Gaussian Markov processes, graph-aware elimination, and marginal/MAP inference on trees."
 order: 2
 ---
 
@@ -1274,3 +1274,243 @@ $$
 On graphs with cycles, exact elimination generally creates fill-in. The size
 of the resulting intermediate cliques—not merely the number of nodes—controls
 the cost; this is the idea captured by treewidth.
+
+## 2.6 MAP and Marginalization in the Gaussian Case
+
+For Gaussians, MAP inference and marginalization are unusually closely related:
+the mode equals the mean, and integrating or maximizing over one block leaves
+the same quadratic function of the retained variables.
+
+**Important qualification.** The vector of marginal modes equals the joint MAP
+configuration, and the sum-product/max-product canonical message parameters
+agree. The inference outputs do not: marginalization also describes
+uncertainty.
+
+**Fact 2.2 (Gaussian mode equals mean).** For a nondegenerate Gaussian,
+
+$$
+\mathbf x\sim\mathcal N(\boldsymbol\mu,\Lambda)
+\equiv
+\mathcal N^{-1}(J,\mathbf h),
+$$
+
+the unique MAP configuration is
+
+$$
+\boxed{
+\mathbf x_{\mathrm{MAP}}
+=
+\boldsymbol\mu
+=
+J^{-1}\mathbf h.
+}
+$$
+
+<details class="proof-disclosure">
+  <summary>Proof of Fact 2.2: the Gaussian mode is its mean</summary>
+  <div class="proof-body" markdown="1">
+
+Ignoring constants independent of $\mathbf x$, the log density in information
+form is
+
+$$
+\log p(\mathbf x)
+=
+-\frac12\mathbf x^\mathsf T J\mathbf x
++\mathbf h^\mathsf T\mathbf x
++\text{constant}.
+$$
+
+Its gradient and Hessian are
+
+$$
+\nabla_{\mathbf x}\log p(\mathbf x)
+=
+-J\mathbf x+\mathbf h,
+\qquad
+\nabla_{\mathbf x}^2\log p(\mathbf x)
+=
+-J.
+$$
+
+Since $J\succ0$, the Hessian is negative definite, so the unique stationary
+point is the unique maximum:
+
+$$
+-J\mathbf x+\mathbf h=\mathbf0
+\quad\Longrightarrow\quad
+\mathbf x_{\mathrm{MAP}}=J^{-1}\mathbf h=\boldsymbol\mu.
+$$
+
+  </div>
+</details>
+
+Every marginal of a joint Gaussian is also Gaussian. For any subset of blocks
+$A$,
+
+$$
+\boxed{
+\underset{\mathbf x_A}{\operatorname{arg\,max}}\,
+p(\mathbf x_A)
+=
+\boldsymbol\mu_A
+=
+\left(\mathbf x_{\mathrm{MAP}}\right)_A.
+}
+$$
+
+Thus the marginal mode of each subset is exactly the corresponding part of the
+joint MAP configuration. This property is special; it does not hold for a
+general distribution.
+
+**Claim 2.7 (sum-product and max-product agree on Gaussian messages).** Let
+$\Phi(\mathbf x,\mathbf y)$ be a Gaussian potential whose quadratic in the
+eliminated block $\mathbf x$ has positive-definite precision. Eliminate
+$\mathbf x$ while retaining $\mathbf y$. Then
+
+$$
+m_{\mathrm{sum}}(\mathbf y)
+=
+\int\Phi(\mathbf x,\mathbf y)\,d\mathbf x,
+\qquad
+m_{\mathrm{max}}(\mathbf y)
+=
+\max_{\mathbf x}\Phi(\mathbf x,\mathbf y)
+$$
+
+are proportional as functions of $\mathbf y$:
+
+$$
+\boxed{
+m_{\mathrm{sum}}(\mathbf y)
+\propto
+m_{\mathrm{max}}(\mathbf y).
+}
+$$
+
+Therefore sum-product and max-product send the same matrix–vector message
+$(J_{i\to j},\mathbf h_{i\to j})$. They differ only by a scale independent of
+the retained variable.
+
+<details class="proof-disclosure">
+  <summary>Derivation: integrating and maximizing the same Gaussian quadratic</summary>
+  <div class="proof-body" markdown="1">
+
+Write the terms involving the eliminated block as
+
+$$
+\Phi(\mathbf x,\mathbf y)
+=
+\exp\left[
+  q(\mathbf y)
+  -\frac12\mathbf x^\mathsf T K\mathbf x
+  +\mathbf r(\mathbf y)^\mathsf T\mathbf x
+\right],
+\qquad
+K\succ0,
+$$
+
+where $K$ is independent of $\mathbf y$, and let
+$d_x=\dim(\mathbf x)$. Completing the square gives
+
+$$
+\begin{aligned}
+-\frac12\mathbf x^\mathsf T K\mathbf x
++\mathbf r^\mathsf T\mathbf x
+={}&
+-\frac12
+\left(
+  \mathbf x-K^{-1}\mathbf r
+\right)^\mathsf T
+K
+\left(
+  \mathbf x-K^{-1}\mathbf r
+\right)\\
+&+
+\frac12\mathbf r^\mathsf T K^{-1}\mathbf r.
+\end{aligned}
+$$
+
+The maximizer is
+
+$$
+\mathbf x^*(\mathbf y)
+=
+K^{-1}\mathbf r(\mathbf y),
+$$
+
+so
+
+$$
+m_{\mathrm{max}}(\mathbf y)
+=
+\exp\left[
+  q(\mathbf y)
+  +\frac12
+  \mathbf r(\mathbf y)^\mathsf T
+  K^{-1}
+  \mathbf r(\mathbf y)
+\right].
+$$
+
+Integrating the centered Gaussian factor instead gives
+
+$$
+m_{\mathrm{sum}}(\mathbf y)
+=
+(2\pi)^{d_x/2}|K|^{-1/2}
+\exp\left[
+  q(\mathbf y)
+  +\frac12
+  \mathbf r(\mathbf y)^\mathsf T
+  K^{-1}
+  \mathbf r(\mathbf y)
+\right].
+$$
+
+The determinant factor is independent of $\mathbf y$. The two messages
+therefore have the same quadratic and linear terms in $\mathbf y$, hence the
+same canonical parameters.
+
+For the tree message in Section 2.4,
+
+$$
+K=\bar J_{i\setminus j},
+\qquad
+\mathbf r(\mathbf x_j)
+=
+\bar{\mathbf h}_{i\setminus j}
+-J_{ij}\mathbf x_j,
+$$
+
+which recovers exactly the previously derived
+$(J_{i\to j},\mathbf h_{i\to j})$ update.
+
+  </div>
+</details>
+
+Consequently, a Gaussian tree needs only one canonical message-update rule:
+
+- **Sum-product** uses it to obtain marginal means and covariances.
+- **Max-product** uses it to obtain the joint MAP configuration, with
+  maximizing states recovered by back-substitution.
+
+What is shared is the quadratic algebra. Sum-product additionally yields
+marginal covariances and, if scalar normalization factors are tracked, the
+evidence. MAP estimation yields the maximizing configuration and can separately
+track its value, but it does not provide marginal uncertainty.
+
+**Memory aid.**
+
+$$
+\boxed{
+\begin{aligned}
+\text{Gaussian mean}
+&=
+\text{Gaussian mode},\\
+\text{integrate a Gaussian quadratic}
+&\propto
+\text{maximize the same quadratic}.
+\end{aligned}
+}
+$$
