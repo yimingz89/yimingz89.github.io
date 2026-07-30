@@ -1,7 +1,7 @@
 ---
 title: "2. Gaussian Graphical Models and Inference"
 topic: "Algorithms for Inference"
-summary: "Gaussian Markov processes, precision factorization, innovations, and message passing."
+summary: "Gaussian Markov processes, innovations, precision factorization, and exact message passing on trees."
 order: 2
 ---
 
@@ -732,5 +732,307 @@ J_{ii}\longrightarrow\text{node potential},
 J_{ij}\ne0\longrightarrow\text{edge potential},
 \qquad
 J_{ij}=0\longrightarrow\text{missing edge}.
+}
+$$
+
+## 2.4 Gaussian Message Passing on Undirected Trees
+
+The two-node calculation now becomes a local update rule. Assume the precision
+graph $(\mathcal V,\mathcal E)$ from Section 2.3 is a tree. Removing an edge
+$(i,j)$ then separates the graph into two components. The message $i\to j$
+summarizes everything on the $i$ side as a function of $\mathbf x_j$.
+
+Let $\mathcal N(i)$ denote the neighbors of node $i$. For either orientation of
+an undirected edge, use
+$\psi_{ij}(\mathbf x_i,\mathbf x_j)
+=\psi_{ji}(\mathbf x_j,\mathbf x_i)$.
+The sum–product message is
+
+$$
+m_{i\to j}(\mathbf x_j)
+=
+\int
+\phi_i(\mathbf x_i)
+\psi_{ij}(\mathbf x_i,\mathbf x_j)
+\prod_{k\in\mathcal N(i)\setminus\{j\}}
+m_{k\to i}(\mathbf x_i)
+\,d\mathbf x_i.
+$$
+
+For a leaf sending toward the tree, the product is empty: it contributes only
+its local and edge potentials.
+
+Suppose each incoming message has canonical form
+
+$$
+m_{k\to i}(\mathbf x_i)
+\propto
+\exp\left(
+  -\frac12\mathbf x_i^\mathsf T
+  J_{k\to i}\mathbf x_i
+  +\mathbf h_{k\to i}^\mathsf T\mathbf x_i
+\right).
+$$
+
+Before eliminating $\mathbf x_i$, collect its local parameters and every
+incoming message except the one from the recipient:
+
+$$
+\boxed{
+\begin{aligned}
+\bar J_{i\setminus j}
+&=
+J_{ii}
++
+\sum_{k\in\mathcal N(i)\setminus\{j\}}
+J_{k\to i},\\
+\bar{\mathbf h}_{i\setminus j}
+&=
+\mathbf h_i
++
+\sum_{k\in\mathcal N(i)\setminus\{j\}}
+\mathbf h_{k\to i}.
+\end{aligned}
+}
+$$
+
+These are the **cavity parameters** at $i$: the information available at
+$i$ when the branch through $j$ is left out.
+
+**Claim 2.4 (Gaussian tree-message update).** The outgoing message remains an
+exponential-quadratic potential,
+
+$$
+m_{i\to j}(\mathbf x_j)
+\propto
+\exp\left(
+  -\frac12\mathbf x_j^\mathsf T
+  J_{i\to j}\mathbf x_j
+  +\mathbf h_{i\to j}^\mathsf T\mathbf x_j
+\right),
+$$
+
+with
+
+$$
+\boxed{
+\begin{aligned}
+J_{i\to j}
+&=
+-J_{ji}
+\bar J_{i\setminus j}^{-1}
+J_{ij},\\
+\mathbf h_{i\to j}
+&=
+-J_{ji}
+\bar J_{i\setminus j}^{-1}
+\bar{\mathbf h}_{i\setminus j}.
+\end{aligned}
+}
+$$
+
+Thus each message is just one matrix and one vector. It first adds all
+information arriving from the other branches, then eliminates the sending
+node through a local Schur complement.
+
+<details class="proof-disclosure">
+  <summary>Derivation of the Gaussian tree-message update</summary>
+  <div class="proof-body" markdown="1">
+
+After multiplying the local potential by the incoming messages, every term
+involving $\mathbf x_i$ is
+
+$$
+-\frac12
+\mathbf x_i^\mathsf T
+\bar J_{i\setminus j}
+\mathbf x_i
++
+\bar{\mathbf h}_{i\setminus j}^\mathsf T\mathbf x_i
+-
+\mathbf x_i^\mathsf T J_{ij}\mathbf x_j.
+$$
+
+Therefore
+
+$$
+m_{i\to j}(\mathbf x_j)
+\propto
+\int
+\exp\left[
+  -\frac12
+  \mathbf x_i^\mathsf T
+  \bar J_{i\setminus j}
+  \mathbf x_i
+  +
+  \left(
+    \bar{\mathbf h}_{i\setminus j}
+    -J_{ij}\mathbf x_j
+  \right)^\mathsf T
+  \mathbf x_i
+\right]
+\,d\mathbf x_i.
+$$
+
+Using the Gaussian integral
+
+$$
+\int
+\exp\left(
+  -\frac12\mathbf z^\mathsf T K\mathbf z
+  +\mathbf g^\mathsf T\mathbf z
+\right)
+\,d\mathbf z
+\propto
+\exp\left(
+  \frac12\mathbf g^\mathsf T K^{-1}\mathbf g
+\right),
+$$
+
+we obtain, up to a constant independent of $\mathbf x_j$,
+
+$$
+\begin{aligned}
+\log m_{i\to j}(\mathbf x_j)
+={}&
+-\mathbf x_j^\mathsf T
+J_{ji}\bar J_{i\setminus j}^{-1}
+\bar{\mathbf h}_{i\setminus j}\\
+&+
+\frac12
+\mathbf x_j^\mathsf T
+J_{ji}\bar J_{i\setminus j}^{-1}
+J_{ij}\mathbf x_j
++
+\text{constant}.
+\end{aligned}
+$$
+
+Matching the quadratic and linear terms with the canonical message form gives
+the displayed update.
+
+  </div>
+</details>
+
+As in the two-node case, a message is a potential rather than a standalone
+density: $J_{i\to j}\preceq0$. During a valid tree-elimination schedule,
+$\bar J_{i\setminus j}\succ0$. In code, the displayed inverse should normally
+be implemented as a linear solve.
+
+Once node $i$ has received messages from **all** its neighbors, its marginal
+parameters are
+
+$$
+\boxed{
+\begin{aligned}
+\widehat J_i
+&=
+J_{ii}
++
+\sum_{k\in\mathcal N(i)}
+J_{k\to i},\\
+\widehat{\mathbf h}_i
+&=
+\mathbf h_i
++
+\sum_{k\in\mathcal N(i)}
+\mathbf h_{k\to i}.
+\end{aligned}
+}
+$$
+
+Hence
+
+$$
+\mathbf x_i
+\sim
+\mathcal N^{-1}
+\left(
+  \widehat J_i,\,
+  \widehat{\mathbf h}_i
+\right),
+\qquad
+\operatorname{Cov}(\mathbf x_i)
+=
+\widehat J_i^{-1},
+\qquad
+\mathbb E[\mathbf x_i]
+=
+\widehat J_i^{-1}\widehat{\mathbf h}_i.
+$$
+
+**Claim 2.5 (exactness on trees).** All node marginals are exact after one
+inward pass and one outward pass:
+
+1. Choose any node as the root.
+2. **Collect:** send messages from the leaves toward the root. A node sends
+   after receiving from every neighbor except its parent.
+3. **Distribute:** send messages from the root back toward the leaves. A node
+   sends after receiving from every neighbor except the child receiving the
+   message.
+
+After these two passes, both directed messages have been computed on every
+edge, so every node can form $(\widehat J_i,\widehat{\mathbf h}_i)$. Messages
+whose prerequisites are available can be computed in parallel.
+
+<details class="proof-disclosure">
+  <summary>Proof of Claim 2.5: why two passes are exact on a tree</summary>
+  <div class="proof-body" markdown="1">
+
+Remove an edge $(i,j)$, and let $\mathcal T_{i\to j}$ be the component
+containing $i$. The exact contribution of that entire component to $j$ is
+
+$$
+\begin{aligned}
+m_{i\to j}(\mathbf x_j)
+\propto
+\int&
+\psi_{ij}(\mathbf x_i,\mathbf x_j)
+\prod_{\ell\in\mathcal T_{i\to j}}
+\phi_\ell(\mathbf x_\ell)\\
+&\times
+\prod_{(u,v)\in\mathcal E(\mathcal T_{i\to j})}
+\psi_{uv}(\mathbf x_u,\mathbf x_v)
+\,
+d\mathbf x_{\mathcal T_{i\to j}}.
+\end{aligned}
+$$
+
+For a leaf, this reduces directly to
+$\int\phi_i(\mathbf x_i)\psi_{ij}(\mathbf x_i,\mathbf x_j)\,d\mathbf x_i$.
+For an internal node, removing $i$ splits
+$\mathcal T_{i\to j}\setminus\{i\}$ into the disjoint components rooted at
+$k\in\mathcal N(i)\setminus\{j\}$. Integrating each component produces
+$m_{k\to i}(\mathbf x_i)$, leaving exactly the recursive message update above.
+Induction from the leaves therefore proves that every collected or distributed
+message integrates out its whole side of the edge exactly.
+
+Finally, deleting node $i$ separates the tree into the components rooted at
+its neighbors. Multiplying $\phi_i$ by all incoming messages integrates out
+every other node, so the resulting normalized belief is the exact marginal
+$p(\mathbf x_i)$.
+
+  </div>
+</details>
+
+Trees matter because no branch is counted twice. On a graph with cycles, the
+same equations define **loopy Gaussian belief propagation**, whose convergence
+and exactness require additional conditions.
+
+**Memory aid.**
+
+$$
+\boxed{
+\begin{aligned}
+\text{local parameters}+\text{incoming messages}
+&\longrightarrow
+\text{cavity parameters},\\
+\text{eliminate through one edge}
+&\longrightarrow
+\text{outgoing message},\\
+\text{local parameters}+\text{all incoming messages}
+&\longrightarrow
+\text{exact node marginal}.
+\end{aligned}
 }
 $$
