@@ -1,0 +1,13 @@
+{
+  "name": "hanzi-cloud-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test flashcards.test.cjs sync-state.test.mjs cloud-controller.test.mjs",
+    "test:rules": "firebase emulators:exec --config ../firebase/firebase.json --project demo-hanzi-study --only firestore \"node --test cloud-rules.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.32.1"
+  }
+}

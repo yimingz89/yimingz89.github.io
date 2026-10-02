@@ -166,6 +166,38 @@ a:focus-visible {
   font-weight: 650;
 }
 
+.cloud-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: rgba(59, 214, 207, 0.035);
+  font-size: 0.8rem;
+}
+
+.cloud-copy { flex: 1 1 17rem; }
+.cloud-copy strong { color: #dce7f4; }
+.cloud-copy p { margin: 0.3rem 0; color: var(--muted); line-height: 1.5; }
+#cloud-account { color: var(--cyan); overflow-wrap: anywhere; }
+.cloud-panel.is-error #cloud-status { color: #ffb3a8; }
+.cloud-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.8rem 1rem; }
+.cloud-button {
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--cyan);
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--cyan);
+  cursor: pointer;
+  font-weight: 700;
+}
+.cloud-button:hover { background: rgba(59, 214, 207, 0.1); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .progress-track {
   width: 7rem;
   height: 0.35rem;

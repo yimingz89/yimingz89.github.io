@@ -17,7 +17,20 @@ const state = {
   progress: loadProgress(),
   starred: loadStarred(),
   learning: loadLearning(),
+  cloudEditable: true,
+  cloudSignedIn: false,
 };
+
+const studyListeners = new Set();
+
+function notifyStudyChanges(changes) {
+  if (!Object.keys(changes).length) return;
+  for (const listener of studyListeners) listener(changes);
+}
+
+function currentStarValue(id) {
+  return state.learning.has(id) ? "learning" : state.starred.has(id) ? "keep-fresh" : "none";
+}
 
 const elements = {
   loading: document.querySelector("#loading-state"),
@@ -270,6 +283,7 @@ function updateStarButton(card) {
 }
 
 function toggleStar() {
+  if (!state.cloudEditable) return;
   const card = state.filteredCards[state.index];
   if (!card) return;
 
@@ -282,10 +296,12 @@ function toggleStar() {
   }
   saveStarred();
   saveLearning();
+  notifyStudyChanges({ [id]: { star: currentStarValue(id) } });
   refreshAfterCategoryChange(card);
 }
 
 function toggleLearning() {
+  if (!state.cloudEditable) return;
   const card = state.filteredCards[state.index];
   if (!card) return;
 
@@ -298,6 +314,7 @@ function toggleLearning() {
   }
   saveLearning();
   saveStarred();
+  notifyStudyChanges({ [id]: { star: currentStarValue(id) } });
   refreshAfterCategoryChange(card);
 }
 
@@ -342,10 +359,12 @@ function moveCard(direction) {
 }
 
 function rateCard(rating) {
+  if (!state.cloudEditable) return;
   const card = state.filteredCards[state.index];
   if (!card) return;
   state.progress[cardId(card)] = rating;
   saveProgress();
+  notifyStudyChanges({ [cardId(card)]: { rating } });
   updateProgress();
 
   if (state.index < state.filteredCards.length - 1) {
@@ -503,9 +522,13 @@ function shuffleStarredCards() {
 }
 
 function resetProgress() {
-  if (!window.confirm("Reset all learned and review marks on this device?")) return;
+  if (!state.cloudEditable) return;
+  const scope = state.cloudSignedIn ? "your cloud account and signed-in devices" : "this device";
+  if (!window.confirm(`Reset all learned and review marks on ${scope}? Stars are kept.`)) return;
+  const changes = Object.fromEntries(Object.keys(state.progress).map((id) => [id, { rating: "unrated" }]));
   state.progress = {};
   saveProgress();
+  notifyStudyChanges(changes);
   updateProgress();
 }
 
@@ -556,6 +579,7 @@ function validateBackup(backup) {
 }
 
 function mergeBackup(backup) {
+  if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to import locally.");
   validateBackup(backup);
   const progress = { ...state.progress, ...backup.progress };
   const starred = new Set(state.starred);
@@ -590,6 +614,10 @@ function mergeBackup(backup) {
   state.progress = progress;
   state.starred = starred;
   state.learning = learning;
+  const changes = {};
+  for (const id of [...backup.keepFresh, ...backup.learning]) changes[id] = { star: currentStarValue(id) };
+  for (const [id, rating] of Object.entries(backup.progress)) changes[id] = { ...changes[id], rating };
+  notifyStudyChanges(changes);
   applyFilters({ resetIndex: false });
 }
 
@@ -607,17 +635,20 @@ async function importProgress() {
     }
     validateBackup(backup);
     const starCount = backup.keepFresh.length + backup.learning.length;
-    if (!window.confirm(`Merge ${starCount} stars and ${Object.keys(backup.progress).length} progress marks into this browser? Imported marks win for matching cards; all other saved cards are kept.`)) {
+    const destination = state.cloudSignedIn ? "your cloud account (and all signed-in devices)" : "this browser";
+    if (!window.confirm(`Merge ${starCount} stars and ${Object.keys(backup.progress).length} progress marks into ${destination}? Imported marks win for matching cards; all other saved cards are kept.`)) {
       setBackupStatus("Import canceled. Your saved cards are unchanged.");
       return;
     }
     mergeBackup(backup);
-    setBackupStatus("Imported successfully. Your stars and progress are saved in this browser.");
+    setBackupStatus(state.cloudSignedIn
+      ? "Imported successfully. Changes are queued for cloud sync; check the sync status above."
+      : "Imported successfully. Your stars and progress are saved in this browser.");
   } catch (error) {
     setBackupStatus(error.message, true);
   } finally {
     elements.importFile.value = "";
-    elements.importButton.disabled = false;
+    elements.importButton.disabled = !state.cloudEditable;
   }
 }
 
@@ -652,6 +683,8 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     const activeTag = document.activeElement?.tagName;
     if (activeTag === "SELECT" || activeTag === "INPUT" || activeTag === "SUMMARY" || activeTag === "A") return;
+
+    if (document.activeElement?.closest?.("#cloud-panel")) return;
 
     if (document.activeElement === elements.exportButton || document.activeElement === elements.importButton) return;
 
@@ -722,6 +755,7 @@ function registerWebMcpTools() {
       execute() {
         const card = state.filteredCards[state.index];
         if (!card) throw new Error("No card is available in the current deck.");
+        if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to edit locally.");
         toggleStar();
         return { character: card.character, keepFresh: isStarred(card), learning: isLearning(card), saved: true };
       },
@@ -735,6 +769,7 @@ function registerWebMcpTools() {
       execute() {
         const card = state.filteredCards[state.index];
         if (!card) throw new Error("No card is available in the current deck.");
+        if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to edit locally.");
         toggleLearning();
         return { character: card.character, learning: isLearning(card), keepFresh: isStarred(card), saved: true };
       },
@@ -769,6 +804,7 @@ function registerWebMcpTools() {
         }
         const card = state.filteredCards[state.index];
         if (!card) throw new Error("No card is available in the current deck.");
+        if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to edit locally.");
         rateCard(input.rating);
         return { character: card.character, rating: input.rating, saved: true };
       },
@@ -798,13 +834,57 @@ async function init() {
     elements.exportButton.disabled = false;
     elements.importButton.disabled = false;
     registerWebMcpTools();
+    return true;
   } catch (error) {
     console.error(error);
     elements.loading.classList.add("hidden");
     elements.flashcard.classList.add("hidden");
     elements.navigation.classList.add("hidden");
     elements.error.classList.remove("hidden");
+    return false;
   }
 }
 
-init();
+function setCloudEditable(editable) {
+  state.cloudEditable = editable;
+  for (const element of [elements.starButton, elements.learningStarButton, elements.againButton, elements.gotItButton, elements.resetButton, elements.importButton]) {
+    element.disabled = !editable;
+  }
+}
+
+function applyCloudBackup(backup) {
+  validateBackup(backup);
+  const current = state.filteredCards[state.index];
+  const revealed = state.revealed;
+  const order = new Map(state.filteredCards.map((card, index) => [cardId(card), index]));
+  // Keep legacy local keys as a cache, so local use and exports continue working.
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(backup.progress));
+  localStorage.setItem(STAR_STORAGE_KEY, JSON.stringify(backup.keepFresh));
+  localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify(backup.learning));
+  state.progress = { ...backup.progress };
+  state.starred = new Set(backup.keepFresh);
+  state.learning = new Set(backup.learning);
+  applyFilters({ resetIndex: false });
+  if (isSpecialDeck() ? state.starredShuffled : state.shuffled) {
+    state.filteredCards.sort((a, b) => (order.get(cardId(a)) ?? Infinity) - (order.get(cardId(b)) ?? Infinity));
+  }
+  const index = current ? state.filteredCards.findIndex((card) => cardId(card) === cardId(current)) : -1;
+  if (index !== -1) state.index = index;
+  renderCard();
+  if (index !== -1 && revealed) {
+    state.revealed = true;
+    elements.front.classList.add("hidden");
+    elements.back.classList.remove("hidden");
+  }
+}
+
+window.hanziStudy = {
+  ready: init(),
+  getBackup: createBackup,
+  getCardIds: () => [...state.coreCards, ...state.supplementCards].map(cardId),
+  applyCloudBackup,
+  mergeBackup,
+  setCloudEditable,
+  setCloudSignedIn: (signedIn) => { state.cloudSignedIn = signedIn; },
+  subscribe: (listener) => { studyListeners.add(listener); return () => studyListeners.delete(listener); },
+};

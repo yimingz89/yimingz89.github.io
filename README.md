@@ -52,7 +52,18 @@ for headings, paragraphs, and lists.
 
 The app supports Core 2,000 and HSK supplement cards, answer reveal, card-number jumps, Keep fresh and Learning stars, category filters, and starred-only shuffle. Assets and the deck use relative paths so the app works under `/flashcards/`.
 
-Progress is stored only in the visitor’s browser, separately for each origin and device. The footer’s **Move or back up your progress** controls export a JSON backup and import it into another browser or the hosted app. Import is a confirmed merge: imported marks win for matching marked cards; other existing cards are kept. Nothing is uploaded or synchronized automatically. Local-app users should export from the exact address they previously used (for example `http://127.0.0.1:4173/`, not `localhost`).
+Signed-out progress stays in the browser. **Sign in with Google** enables private Firestore sync of Keep fresh, Learning, learned, and review marks. Use the same authorized account on every device. Deck filters, shuffle order, and current card remain device-local. The header reports connection and save status; wait for **Synced to cloud** before switching devices.
+
+Changes are merged per card and field; if two devices edit the same field, the last write received by Firestore wins. Changes made offline during a connected session stay queued in browser storage and upload on reconnection. A fresh page load must connect before cloud editing is enabled. Sign-out returns to local-only editing; export any such edits before signing back in, since existing cloud state takes precedence.
+
+### One-time Firebase setup
+
+1. Register a Firebase web app and put its public client configuration in `flashcards/firebase-config.js`. Never include service-account credentials.
+2. Enable Google in Authentication and add the deployed hostname to Authorized domains. Add localhost separately only if you need local sign-in.
+3. Create a Standard Firestore database in production mode. Copy `firebase/firestore.rules.example`, replace `OWNER_GOOGLE_EMAIL` with the one permitted Google account email, and publish in Firestore → Rules. The rules require that verified Google identity and matching user ID; all other access is denied. Keep the customized rules private if you do not want your email in the public repository.
+4. Open the hosted app and sign in. An empty cloud is seeded from this browser on first connection. If cloud data already exists, it replaces the local display; a pre-sync browser backup is retained, with a **Merge pre-sync backup** button for explicit recovery.
+
+The footer’s **Move or back up your progress** controls export a JSON backup or import it. Import is a confirmed merge: imported marks win for matching marked cards; other existing cards are kept. When signed in, imported marks also sync to Firestore. Local-app users should export from the exact address previously used (for example `http://127.0.0.1:4173/`, not `localhost`), then import into the hosted app after sign-in. Keep an exported backup before clearing browser storage, as unsynced offline changes depend on that storage.
 
 To update the app, edit the static files in `flashcards/` and commit to `main`; the existing GitHub Pages workflow publishes them with the rest of the site. No npm build is needed. To preview only the app locally:
 
@@ -60,6 +71,6 @@ To update the app, edit the static files in `flashcards/` and commit to `main`; 
 python3 -m http.server 4174 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:4174/flashcards/`. Run the dependency-free regression tests with `node --test tests/flashcards.test.cjs`.
+Open `http://127.0.0.1:4174/flashcards/`. Run dependency-free app and sync regression tests with `node --test tests/flashcards.test.cjs tests/sync-state.test.mjs tests/cloud-controller.test.mjs`. For database security and two-client listener tests, run `npm ci` followed by `npm run test:rules` inside `tests/`. These developer-only emulator tests require Java 21+ and never access the live database. Users need no installations to use the hosted app.
 
 The supplied dataset is redistributed unchanged. Its metadata credits CC-CEDICT / MDBG (CC BY-SA 4.0), hanziDB / Jun Da, Unihan, wordfreq (Robyn Speer), and complete-hsk-vocabulary (drkameleon). The app’s **Data & credits** footer preserves attribution and links to the license and source dataset.

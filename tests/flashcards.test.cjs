@@ -93,8 +93,8 @@ test('relative-path deployment loads all cards and keeps card jumps/reveal worki
   app.nodes.get('reveal-button').handlers.click();
   assert.equal(app.run('state.revealed'), true);
   assert.equal(app.nodes.get('export-progress').disabled, false);
-  assert.match(html, /href="\.\/styles.css\?v=10"/);
-  assert.match(html, /src="\.\/app.js\?v=10"/);
+  assert.match(html, /href="\.\/styles.css\?v=11"/);
+  assert.match(html, /src="\.\/app.js\?v=11"/);
   assert.throws(() => app.run('jumpToRank(-1)'), /whole card number/);
 });
 
@@ -202,4 +202,41 @@ test('backup buttons and disclosure keyboard interaction do not trigger card sho
     assert.equal(app.run('state.revealed'), false);
   }
   assert.equal(prevented, false);
+});
+
+test('cloud bridge emits only changed fields; cloud snapshots do not echo writes', async () => {
+  const app = await loadApp();
+  const changes = [];
+  app.context.window.hanziStudy.subscribe((value) => changes.push(JSON.parse(JSON.stringify(value))));
+  app.run('toggleStar(); toggleLearning(); rateCard("learned");');
+  assert.deepEqual(changes, [
+    { '1:的': { star: 'keep-fresh' } },
+    { '1:的': { star: 'learning' } },
+    { '1:的': { rating: 'learned' } },
+  ]);
+  app.run('jumpToRank(100); setRevealed(true)');
+  app.context.window.hanziStudy.applyCloudBackup(backup({ keepFresh: ['100:实'], progress: { '1:的': 'review' } }));
+  assert.equal(changes.length, 3);
+  assert.equal(app.run('state.filteredCards[state.index].rank'), 100);
+  assert.equal(app.run('state.revealed'), true);
+  assert.equal(app.run('state.starred.has("100:实")'), true);
+  assert.equal(app.run('state.learning.size'), 0);
+  assert.deepEqual(JSON.parse(app.storage.get(progressKey)), { '1:的': 'review' });
+});
+
+test('cloud connection guard blocks mutations; reset syncs rating removals without clearing stars', async () => {
+  const app = await loadApp({ [starKey]: '["1:的"]', [progressKey]: '{"1:的":"learned"}' });
+  const changes = [];
+  app.context.window.hanziStudy.subscribe((value) => changes.push(JSON.parse(JSON.stringify(value))));
+  app.context.window.hanziStudy.setCloudEditable(false);
+  const before = Array.from(app.storage);
+  app.run('toggleStar(); toggleLearning(); rateCard("review"); resetProgress()');
+  assert.deepEqual(Array.from(app.storage), before);
+  assert.throws(() => app.context.window.hanziStudy.mergeBackup(backup()), /Wait for cloud sync/);
+  assert.equal(app.nodes.get('import-progress').disabled, true);
+  assert.deepEqual(changes, []);
+  app.context.window.hanziStudy.setCloudEditable(true);
+  app.run('resetProgress()');
+  assert.deepEqual(changes, [{ '1:的': { rating: 'unrated' } }]);
+  assert.equal(app.run('state.starred.has("1:的")'), true);
 });

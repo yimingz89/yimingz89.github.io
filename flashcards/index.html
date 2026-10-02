@@ -13,7 +13,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M15 19h34M20 31h24M17 45h30M32 14v36' stroke='%23ff665a' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="./styles.css?v=10" />
+    <link rel="stylesheet" href="./styles.css?v=11" />
   </head>
   <body>
     <div class="app-shell">
@@ -32,6 +32,20 @@
           </div>
         </div>
       </header>
+
+      <section class="cloud-panel" id="cloud-panel" aria-label="Cloud sync">
+        <div class="cloud-copy">
+          <strong>Study across devices</strong>
+          <p id="cloud-status" role="status" aria-live="polite">Loading Google sign-in… Local study remains available.</p>
+          <span id="cloud-account"></span>
+        </div>
+        <div class="cloud-actions">
+          <button class="cloud-button" id="cloud-login" type="button" disabled>Sign in with Google</button>
+          <button class="cloud-button hidden" id="cloud-retry" type="button">Retry sync</button>
+          <button class="text-button hidden" id="cloud-logout" type="button">Sign out</button>
+          <button class="text-button hidden" id="cloud-recover" type="button" title="Merge the backup kept on this browser before cloud setup">Merge pre-sync backup</button>
+        </div>
+      </section>
 
       <main>
         <aside class="study-panel" aria-label="Study settings">
@@ -230,7 +244,7 @@
       <footer class="app-footer">
         <details class="backup-panel">
           <summary>Move or back up your progress</summary>
-          <p>Stars and progress stay in this browser, on this website. To move from the local app or another device, export there and import here. Nothing is uploaded.</p>
+          <p>Sign in with the same Google account on every device to sync stars and progress. While signed out, changes stay in this browser. To bring over an older local deck, export there and import here. Imports also sync when signed in. Keep an export as an independent backup.</p>
           <div class="backup-actions">
             <button class="text-button" id="export-progress" type="button" disabled>Export progress</button>
             <button class="text-button" id="import-progress" type="button" disabled>Import progress</button>
@@ -247,6 +261,7 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=10" defer></script>
+    <script src="./app.js?v=11" defer></script>
+    <script type="module" src="./cloud-sync.mjs?v=11"></script>
   </body>
 </html>
