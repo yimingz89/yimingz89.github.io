@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Study high-frequency Chinese characters with personal Keep fresh and Learning decks."
+    />
+    <title>Hanzi Study</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M15 19h34M20 31h24M17 45h30M32 14v36' stroke='%23ff665a' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css?v=10" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-group">
+          <a class="brand" href="#" aria-label="Hanzi Study home">
+            <span class="brand-mark" aria-hidden="true">字</span>
+            <span>Hanzi Study</span>
+          </a>
+          <a class="site-home-link" href="https://yimingz89.github.io/">← Yiming’s website</a>
+        </div>
+        <div class="session-progress" aria-label="Study progress">
+          <span id="progress-copy">0 learned</span>
+          <div class="progress-track" aria-hidden="true">
+            <span id="progress-bar"></span>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <aside class="study-panel" aria-label="Study settings">
+          <div>
+            <p class="eyebrow">Your deck</p>
+            <h1>Build recognition,<br />one character at a time.</h1>
+          </div>
+
+          <div class="controls">
+            <label>
+              <span>Cards</span>
+              <select id="deck-select">
+                <option value="core">Core 2,000</option>
+                <option value="complete">Core + HSK supplement</option>
+                <option value="starred" id="starred-option">All starred cards (0)</option>
+                <option value="keep-fresh" id="keep-fresh-option">Keep fresh (0)</option>
+                <option value="learning" id="learning-option">Learning (0)</option>
+              </select>
+            </label>
+
+            <label>
+              <span>HSK level</span>
+              <select id="level-select">
+                <option value="all">All levels</option>
+                <option value="1">HSK 1</option>
+                <option value="2">HSK 2</option>
+                <option value="3">HSK 3</option>
+                <option value="4">HSK 4</option>
+                <option value="5">HSK 5</option>
+                <option value="6">HSK 6</option>
+                <option value="7">HSK 7–9</option>
+                <option value="none">Not in HSK</option>
+              </select>
+            </label>
+
+            <form class="jump-form" id="jump-form">
+              <label for="jump-input">Jump to card number</label>
+              <div class="jump-row">
+                <input
+                  id="jump-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="100"
+                  aria-describedby="jump-message"
+                />
+                <button class="jump-button" type="submit">Go</button>
+              </div>
+              <span class="jump-message" id="jump-message" role="status" aria-live="polite"></span>
+            </form>
+
+            <fieldset class="star-filters" aria-describedby="star-filter-help">
+              <legend>Filter by stars</legend>
+              <div class="star-filter-buttons">
+                <button class="star-filter-button" id="filter-keep-fresh" type="button" aria-pressed="false">
+                  <span aria-hidden="true">★</span>
+                  <span>Keep fresh</span>
+                  <span class="filter-count" id="keep-fresh-count">0</span>
+                </button>
+                <button class="star-filter-button learning-filter" id="filter-learning" type="button" aria-pressed="false">
+                  <span aria-hidden="true">★</span>
+                  <span>Learning</span>
+                  <span class="filter-count" id="learning-count">0</span>
+                </button>
+              </div>
+              <p class="filter-help" id="star-filter-help">Select either or both. Neither shows the full deck.</p>
+              <button class="shuffle-starred-button" id="shuffle-starred-button" type="button" title="Shuffle the selected star categories, or both if neither is selected">Shuffle starred cards</button>
+              <p class="filter-status" id="star-filter-status" role="status">Showing the full deck</p>
+              <button class="text-button hidden" id="back-to-full-deck" type="button">← Back to full deck</button>
+            </fieldset>
+
+            <div class="control-row">
+              <button class="text-button" id="shuffle-button" type="button">
+                Shuffle deck
+              </button>
+              <button class="text-button muted" id="reset-button" type="button">
+                Reset progress
+              </button>
+            </div>
+          </div>
+
+          <div class="tip">
+            <span class="tip-key">Space</span>
+            <span>reveal</span>
+            <span class="tip-dot">·</span>
+            <span class="tip-key">1</span>
+            <span>again</span>
+            <span class="tip-dot">·</span>
+            <span class="tip-key">2</span>
+            <span>got it</span>
+          </div>
+        </aside>
+
+        <section class="card-stage" aria-live="polite">
+          <div class="loading-state" id="loading-state">
+            <span class="loading-character">好</span>
+            <p>Preparing your deck…</p>
+          </div>
+
+          <div class="error-state hidden" id="error-state">
+            <p class="eyebrow">Couldn’t load the deck</p>
+            <h2>Your deck couldn’t be loaded.</h2>
+            <p>Check your connection and refresh. If you’re running locally, make sure the local server is running.</p>
+          </div>
+
+          <div class="empty-state hidden" id="empty-state">
+            <p class="eyebrow" id="empty-eyebrow">No cards here</p>
+            <h2 id="empty-title">Try a different HSK level.</h2>
+            <p id="empty-copy"></p>
+          </div>
+
+          <article class="flashcard hidden" id="flashcard">
+            <div class="card-topline">
+              <div class="card-meta">
+                <span id="rank-label">Rank #1</span>
+                <span class="meta-divider"></span>
+                <span id="hsk-label">HSK 1</span>
+              </div>
+              <div class="card-actions">
+                <button
+                  class="star-button"
+                  id="star-button"
+                  type="button"
+                  aria-label="Mark this card to keep fresh"
+                  aria-pressed="false"
+                >
+                  <span class="star-glyph" id="star-glyph" aria-hidden="true">☆</span>
+                  <span id="star-label">Keep fresh</span>
+                </button>
+                <button
+                  class="star-button learning-star-button"
+                  id="learning-star-button"
+                  type="button"
+                  aria-label="Mark this card as learning"
+                  aria-pressed="false"
+                >
+                  <span class="star-glyph" id="learning-star-glyph" aria-hidden="true">☆</span>
+                  <span id="learning-star-label">Learning</span>
+                </button>
+                <span class="card-count" id="card-count">1 / 2,000</span>
+              </div>
+            </div>
+
+            <div class="card-face card-front" id="card-front">
+              <div class="hanzi-wrap">
+                <span class="corner corner-top" aria-hidden="true"></span>
+                <div class="hanzi" id="front-character" lang="zh-Hans">的</div>
+                <span class="corner corner-bottom" aria-hidden="true"></span>
+              </div>
+              <p class="recall-prompt">Recall the pronunciation and meaning</p>
+              <button class="primary-button" id="reveal-button" type="button">
+                Reveal answer
+                <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+
+            <div class="card-face card-back hidden" id="card-back">
+              <div class="answer-header">
+                <div>
+                  <div class="answer-character" id="back-character" lang="zh-Hans">的</div>
+                  <p class="gloss" id="card-gloss"></p>
+                </div>
+                <button class="icon-button" id="hide-button" type="button" aria-label="Hide answer">
+                  <span aria-hidden="true">↙</span>
+                </button>
+              </div>
+
+              <div class="answer-scroll" id="answer-content"></div>
+
+              <div class="rating-row">
+                <button class="rating-button again" id="again-button" type="button">
+                  <span class="rating-key">1</span>
+                  Again
+                </button>
+                <button class="rating-button got-it" id="got-it-button" type="button">
+                  <span class="rating-key">2</span>
+                  Got it
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <nav class="card-navigation hidden" id="card-navigation" aria-label="Card navigation">
+            <button id="previous-button" type="button" aria-label="Previous card">
+              <span aria-hidden="true">←</span>
+              Previous
+            </button>
+            <button id="next-button" type="button" aria-label="Next card">
+              Next
+              <span aria-hidden="true">→</span>
+            </button>
+          </nav>
+        </section>
+      </main>
+      <footer class="app-footer">
+        <details class="backup-panel">
+          <summary>Move or back up your progress</summary>
+          <p>Stars and progress stay in this browser, on this website. To move from the local app or another device, export there and import here. Nothing is uploaded.</p>
+          <div class="backup-actions">
+            <button class="text-button" id="export-progress" type="button" disabled>Export progress</button>
+            <button class="text-button" id="import-progress" type="button" disabled>Import progress</button>
+            <input class="hidden" id="import-file" type="file" accept=".json,application/json" />
+          </div>
+          <p id="backup-status" role="status" aria-live="polite"></p>
+        </details>
+        <details class="data-credits">
+          <summary>Data & credits</summary>
+          <p>Top 2,000 Chinese characters + 138 HSK supplement cards. The supplied dataset is redistributed unchanged under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+          <p>Readings, definitions and word pinyin: <a href="https://www.mdbg.net/chinese/dictionary?page=cedict">CC-CEDICT / MDBG</a> (September 12, 2026 release, per dataset metadata). Ranks: hanziDB / Jun Da; glosses: Unihan; word frequencies: wordfreq by Robyn Speer; HSK levels: complete-hsk-vocabulary by drkameleon.</p>
+          <a href="./data/hanzi_top2000_cards.json">View the dataset and its source metadata</a>
+        </details>
+      </footer>
+    </div>
+
+    <script src="./app.js?v=10" defer></script>
+  </body>
+</html>

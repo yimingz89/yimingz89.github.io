@@ -121,8 +121,18 @@ a {
   text-transform: uppercase;
 }
 
+.site-app-nav {
+  margin-top: 1.75rem;
+  padding-block: 0.55rem;
+  border-block: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.site-app-nav .sidebar-link {
+  font-weight: 650;
+}
+
 .nav-drawer {
-  margin-top: 3.25rem;
+  margin-top: 1.75rem;
 }
 
 .nav-drawer > summary {

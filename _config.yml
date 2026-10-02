@@ -23,3 +23,4 @@ defaults:
 
 exclude:
   - README.md
+  - tests
