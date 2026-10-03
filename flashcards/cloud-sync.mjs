@@ -3,6 +3,7 @@ import { SyncState, backupToRecords, recordsToBackup } from './sync-state.mjs';
 
 const panel = document.querySelector('#cloud-panel');
 const status = document.querySelector('#cloud-status');
+const signInError = document.querySelector('#cloud-signin-error');
 const account = document.querySelector('#cloud-account');
 const login = document.querySelector('#cloud-login');
 const logout = document.querySelector('#cloud-logout');
@@ -19,6 +20,8 @@ let session = 0;
 let ready = false;
 let flushing = false;
 let stopped = false;
+let authKnown = false;
+let signInAttempt = null;
 let operationChain = Promise.resolve();
 
 function show(message, isError = false) {
@@ -28,13 +31,39 @@ function show(message, isError = false) {
 
 function friendlyError(error) {
   if (error.code === 'permission-denied') return 'Cloud access denied. Publish the owner-only Firestore rules and use your authorized Google account, then Retry.';
-  if (error.code === 'auth/unauthorized-domain') return 'Add yimingz89.github.io to Firebase Authentication → Settings → Authorized domains.';
+  if (error.code === 'auth/unauthorized-domain') return `This address (${window.location.hostname}) is not authorized for sign-in. Add ${window.location.hostname} to Firebase Authentication → Settings → Authorized domains, or use the hosted app at yimingz89.github.io/flashcards/.`;
   if (error.code === 'auth/operation-not-allowed') return 'Enable the Google provider in Firebase Authentication.';
   if (error.code === 'auth/popup-blocked') return 'Allow the Google sign-in popup for this website, then try again.';
   if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') return 'Sign-in canceled. Your saved cards are unchanged.';
   if (error.code === 'auth/web-storage-unsupported') return 'Allow browser storage for this website to save your sign-in.';
-  if (error.code === 'unavailable' || error.code === 'auth/network-request-failed') return 'Connection unavailable. Saved local changes will sync when you reconnect.';
+  if (error.code === 'auth/network-request-failed') return 'Google sign-in could not communicate with Firebase. This can be a blocked request or an interrupted connection; your saved cards are unchanged. Try again and share the error code below if it persists.';
+  if (error.code === 'unavailable') return 'Connection unavailable. Saved local changes will sync when you reconnect.';
   return 'Cloud sync couldn’t finish. Your local data is still available. Check your connection and browser storage, then Retry.';
+}
+
+function errorCode(error) {
+  // Error messages/customData may contain credentials. Expose only a safe code.
+  return typeof error?.code === 'string' && /^(?:auth\/)?[a-z][a-z0-9-]{0,80}$/.test(error.code)
+    ? error.code : 'unknown-error';
+}
+
+function clearSignInError() {
+  signInError.textContent = '';
+  signInError.classList.add('hidden');
+}
+
+function updateSignInButton() {
+  const waiting = !!signInAttempt && !signInAttempt.slow;
+  login.disabled = !authKnown || waiting;
+  login.textContent = waiting ? 'Waiting for Google…'
+    : signInError.textContent ? 'Retry Google sign-in' : 'Sign in with Google';
+  login.setAttribute('aria-busy', String(waiting));
+}
+
+function showSignInError(error) {
+  signInError.textContent = `${friendlyError(error)} Error code: ${errorCode(error)}.`;
+  signInError.classList.remove('hidden');
+  console.warn('Hanzi Google sign-in:', errorCode(error));
 }
 
 function report(error) {
@@ -120,7 +149,8 @@ async function connect(nextUser) {
   api.setCloudSignedIn(!!user);
   if (!user) {
     account.textContent = '';
-    show('Signed out · changes are saved only in this browser. Sign in to sync across devices.');
+    show(signInAttempt ? 'Waiting for Google sign-in. Complete the separate Google window if it opened.'
+      : 'Signed out · changes are saved only in this browser. Sign in to sync across devices.');
     return;
   }
   account.textContent = user.email || 'Signed in';
@@ -179,17 +209,40 @@ async function start() {
       firestore.collection(store, 'users', uid, 'cards'), { includeMetadataChanges: true }, success, failure,
     ),
   };
-  login.disabled = false;
-  login.addEventListener('click', async () => {
-    login.disabled = true;
-    show('Opening Google sign-in…');
+  login.addEventListener('click', async (event) => {
+    event.preventDefault();
+    if (!authKnown || (signInAttempt && !signInAttempt.slow)) return;
+    // Firebase cancels the previous popup operation when a retry starts. Ignore
+    // that old promise's rejection so it cannot erase the new attempt's status.
+    if (signInAttempt) window.clearTimeout(signInAttempt.timer);
+    const attempt = { slow: false, timer: null };
+    signInAttempt = attempt;
+    clearSignInError();
+    updateSignInButton();
+    show('Opening Google sign-in… Complete the separate Google window if it appears.');
+    attempt.timer = window.setTimeout(() => {
+      if (signInAttempt !== attempt) return;
+      attempt.slow = true;
+      signInError.textContent = 'Google sign-in is still waiting. Finish it in the Google window, or click Retry Google sign-in to start again. Your cards are unchanged. Diagnostic: sign-in-pending.';
+      signInError.classList.remove('hidden');
+      updateSignInButton();
+    }, 20000);
     try {
       const provider = new authSdk.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await authSdk.signInWithPopup(auth, provider);
     } catch (error) {
-      show(friendlyError(error), true);
-    } finally { login.disabled = false; }
+      if (signInAttempt === attempt) {
+        show('Sign-in did not finish. Your cards remain saved in this browser.', true);
+        showSignInError(error);
+      }
+    } finally {
+      window.clearTimeout(attempt.timer);
+      if (signInAttempt === attempt) {
+        signInAttempt = null;
+        updateSignInButton();
+      }
+    }
   });
   logout.addEventListener('click', async () => {
     if (engine?.pendingCount && !window.confirm('Some changes are not yet synced. They will stay queued on this device for this account. Sign out anyway?')) return;
@@ -220,9 +273,22 @@ async function start() {
     paintStatus();
     void flush();
   });
-  authSdk.onAuthStateChanged(auth, (nextUser) => { void connect(nextUser); }, report);
+  authSdk.onAuthStateChanged(auth, (nextUser) => {
+    authKnown = true;
+    if (nextUser) {
+      if (signInAttempt) window.clearTimeout(signInAttempt.timer);
+      signInAttempt = null;
+      clearSignInError();
+    }
+    updateSignInButton();
+    void connect(nextUser);
+  }, (error) => {
+    showSignInError(error);
+    report(error);
+  });
 }
 
-start().catch(() => {
+start().catch((error) => {
+  showSignInError(error);
   show('Cloud sign-in could not load. You can still study locally. Check your connection or content blocker and refresh.', true);
 });

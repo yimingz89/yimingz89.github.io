@@ -13,7 +13,7 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M15 19h34M20 31h24M17 45h30M32 14v36' stroke='%23ff665a' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="./styles.css?v=11" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
   </head>
   <body>
     <div class="app-shell">
@@ -37,6 +37,7 @@
         <div class="cloud-copy">
           <strong>Study across devices</strong>
           <p id="cloud-status" role="status" aria-live="polite">Loading Google sign-in… Local study remains available.</p>
+          <p id="cloud-signin-error" class="hidden" role="alert"></p>
           <span id="cloud-account"></span>
         </div>
         <div class="cloud-actions">
@@ -262,6 +263,6 @@
     </div>
 
     <script src="./app.js?v=11" defer></script>
-    <script type="module" src="./cloud-sync.mjs?v=11"></script>
+    <script type="module" src="./cloud-sync.mjs?v=12"></script>
   </body>
 </html>

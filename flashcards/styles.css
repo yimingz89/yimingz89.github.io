@@ -185,6 +185,7 @@ a:focus-visible {
 .cloud-copy p { margin: 0.3rem 0; color: var(--muted); line-height: 1.5; }
 #cloud-account { color: var(--cyan); overflow-wrap: anywhere; }
 .cloud-panel.is-error #cloud-status { color: #ffb3a8; }
+#cloud-signin-error { color: #ffb3a8; overflow-wrap: anywhere; }
 .cloud-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.8rem 1rem; }
 .cloud-button {
   padding: 0.7rem 1rem;

@@ -14,12 +14,15 @@ assert.ok(!source.includes('import('), 'All network SDK imports must be mocked')
 const empty = () => ({ app: 'hanzi-study', version: 1, keepFresh: [], learning: [], progress: {} });
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 
-async function harness({ local = empty(), remote = {}, stored = new Map(), online = true, denyRead = false } = {}) {
+async function harness({ local = empty(), remote = {}, stored = new Map(), online = true, denyRead = false, deferAuth = false, hostname = 'yimingz89.github.io' } = {}) {
   const nodes = new Map();
   const localEvents = new Map();
   const listeners = [];
   const warnings = [];
   const commits = [];
+  const popups = [];
+  const timers = new Map();
+  let timerId = 0;
   const auth = { currentUser: null };
   const cloud = structuredClone(remote);
   let authChange;
@@ -47,7 +50,8 @@ async function harness({ local = empty(), remote = {}, stored = new Map(), onlin
     if (!nodes.has(id)) {
       const classes = new Set();
       nodes.set(id, { textContent: '', disabled: true, events: {},
-        classList: { add: (x) => classes.add(x), remove: (x) => classes.delete(x), toggle: (x, v) => v ? classes.add(x) : classes.delete(x) },
+        classList: { add: (x) => classes.add(x), remove: (x) => classes.delete(x), toggle: (x, v) => v ? classes.add(x) : classes.delete(x), contains: (x) => classes.has(x) },
+        setAttribute() {},
         addEventListener(name, fn) { this.events[name] = fn; },
       });
     }
@@ -70,7 +74,8 @@ async function harness({ local = empty(), remote = {}, stored = new Map(), onlin
     auth: {
       getAuth: () => auth,
       GoogleAuthProvider: class { setCustomParameters() {} },
-      onAuthStateChanged: (_, callback) => { authChange = callback; callback(null); },
+      onAuthStateChanged: (_, callback) => { authChange = callback; if (!deferAuth) callback(null); },
+      signInWithPopup: () => new Promise((resolve, reject) => popups.push({ resolve, reject })),
       signOut: async () => { auth.currentUser = null; authChange(null); },
     },
     firestore: {
@@ -106,12 +111,24 @@ async function harness({ local = empty(), remote = {}, stored = new Map(), onlin
     localStorage: storage, navigator, crypto: { randomUUID },
     console: { warn: (...args) => warnings.push(args) },
     document: { querySelector: (id) => element(id) },
-    window: { hanziStudy: api, confirm: () => true, addEventListener: (name, callback) => localEvents.set(name, callback) },
+    window: {
+      hanziStudy: api, confirm: () => true, location: { hostname },
+      addEventListener: (name, callback) => localEvents.set(name, callback),
+      setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
+      clearTimeout: (id) => timers.delete(id),
+    },
   });
   vm.runInContext(source, context);
   await settle();
   return {
-    stored, cloud, commits, warnings, nodes, emit,
+    stored, cloud, commits, warnings, nodes, emit, popups,
+    async clickSignIn() {
+      const button = nodes.get('#cloud-login');
+      if (!button.disabled) void button.events.click({ preventDefault() {} });
+      await settle();
+    },
+    async authSignedOut() { authChange(null); await settle(); },
+    async advanceTimers() { for (const [id, timer] of Array.from(timers)) { timers.delete(id); timer.callback(); } await settle(); },
     get backup() { return backup; }, get editable() { return editable; }, get signedIn() { return signedIn; },
     async signIn(uid = 'owner') { auth.currentUser = { uid, email: 'owner@example.com' }; authChange(auth.currentUser); await settle(); },
     async signOut() { await sdk.auth.signOut(); await settle(); },
@@ -214,4 +231,77 @@ test('signing out during an in-flight request cannot apply old-user snapshots', 
   assert.deepEqual(app.backup, local);
   assert.equal(app.signedIn, false);
   assert.match(app.nodes.get('#cloud-status').textContent, /Signed out/);
+});
+
+test('sign-in waits for initial auth and immediately shows a busy state on click', async () => {
+  const app = await harness({ deferAuth: true });
+  assert.equal(app.nodes.get('#cloud-login').disabled, true);
+  await app.clickSignIn();
+  assert.equal(app.popups.length, 0);
+  await app.authSignedOut();
+  await app.clickSignIn();
+  assert.equal(app.popups.length, 1);
+  assert.equal(app.nodes.get('#cloud-login').disabled, true);
+  assert.match(app.nodes.get('#cloud-login').textContent, /Waiting for Google/);
+  assert.match(app.nodes.get('#cloud-status').textContent, /Opening Google/);
+});
+
+test('popup failure stays visible after an auth callback and never exposes credentials', async () => {
+  const app = await harness({ local: { ...empty(), learning: ['2:一'] } });
+  const before = structuredClone(app.backup);
+  await app.clickSignIn();
+  app.popups[0].reject({ code: 'auth/network-request-failed', message: 'secret-token', customData: { credential: 'secret-token' } });
+  await settle();
+  await app.authSignedOut();
+  const error = app.nodes.get('#cloud-signin-error');
+  assert.match(error.textContent, /auth\/network-request-failed/);
+  assert.equal(error.classList.contains('hidden'), false);
+  assert.doesNotMatch(error.textContent, /secret-token|will sync when/);
+  assert.doesNotMatch(JSON.stringify(app.warnings), /secret-token/);
+  assert.equal(app.nodes.get('#cloud-login').disabled, false);
+  assert.match(app.nodes.get('#cloud-login').textContent, /Retry/);
+  assert.deepEqual(app.backup, before);
+  assert.equal(app.commits.length, 0);
+});
+
+test('stalled popup allows retry; old failures cannot overwrite a new attempt', async () => {
+  const app = await harness();
+  await app.clickSignIn();
+  await app.advanceTimers();
+  assert.match(app.nodes.get('#cloud-signin-error').textContent, /sign-in-pending/);
+  assert.equal(app.nodes.get('#cloud-login').disabled, false);
+  await app.clickSignIn();
+  assert.equal(app.popups.length, 2);
+  app.popups[0].reject({ code: 'auth/cancelled-popup-request' });
+  await settle();
+  assert.equal(app.nodes.get('#cloud-signin-error').classList.contains('hidden'), true);
+  assert.equal(app.nodes.get('#cloud-login').disabled, true);
+  assert.match(app.nodes.get('#cloud-status').textContent, /Opening Google/);
+  await app.signIn();
+  app.popups[1].resolve({ user: { uid: 'owner' } });
+  await settle();
+  await app.advanceTimers();
+  assert.equal(app.nodes.get('#cloud-signin-error').classList.contains('hidden'), true);
+  assert.match(app.nodes.get('#cloud-status').textContent, /Synced to cloud/);
+});
+
+test('a late successful sign-in still connects after the slow-popup notice', async () => {
+  const app = await harness();
+  await app.clickSignIn();
+  await app.advanceTimers();
+  await app.signIn();
+  app.popups[0].resolve({ user: { uid: 'owner' } });
+  await settle();
+  assert.equal(app.nodes.get('#cloud-signin-error').classList.contains('hidden'), true);
+  assert.equal(app.signedIn, true);
+  assert.match(app.nodes.get('#cloud-status').textContent, /Synced to cloud/);
+});
+
+test('local unauthorized-domain error names the actual host', async () => {
+  const app = await harness({ hostname: '127.0.0.1' });
+  await app.clickSignIn();
+  app.popups[0].reject({ code: 'auth/unauthorized-domain' });
+  await settle();
+  assert.match(app.nodes.get('#cloud-signin-error').textContent, /Add 127\.0\.0\.1 to Firebase/);
+  assert.match(app.nodes.get('#cloud-signin-error').textContent, /auth\/unauthorized-domain/);
 });

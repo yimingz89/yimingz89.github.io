@@ -93,7 +93,7 @@ test('relative-path deployment loads all cards and keeps card jumps/reveal worki
   app.nodes.get('reveal-button').handlers.click();
   assert.equal(app.run('state.revealed'), true);
   assert.equal(app.nodes.get('export-progress').disabled, false);
-  assert.match(html, /href="\.\/styles.css\?v=11"/);
+  assert.match(html, /href="\.\/styles.css\?v=12"/);
   assert.match(html, /src="\.\/app.js\?v=11"/);
   assert.throws(() => app.run('jumpToRank(-1)'), /whole card number/);
 });
