@@ -1,0 +1,22 @@
+CC-CEDICT Chinese-English dictionary
+Community maintained; published by MDBG and CC-CEDICT contributors.
+Referenced work: CEDICT, Copyright (C) 1997, 1998 Paul Andrew Denisowski.
+
+Source: https://www.mdbg.net/chinese/dictionary?page=cc-cedict
+Dictionary release: 2026-10-03T08:59:08Z (125,173 source entries)
+License: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Changes for this reader: the official version-1 export was reformatted as
+JSON tuples [simplified, numbered pinyin, slash-separated definitions,
+traditional]. No source entries or definitions were edited. Pinyin tone
+marks and lookup indexes are generated at runtime. Original header,
+download timestamp, source hash, and conversion notice are included in
+dictionary.json under meta. This reformatted dictionary remains CC BY-SA 4.0.
+
+The dictionary is supplied without warranties. Multiple readings and
+definitions are possible; this application does not determine context or
+produce automatic sentence translations. Word segmentation is heuristic.
+
+Rebuild with: node reader/build-dictionary.mjs /path/to/cedict.txt.gz
+Download source: https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz

@@ -1,0 +1,397 @@
+import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from './dictionary.mjs';
+
+const $ = (id) => document.getElementById(id);
+const KEY = 'yiming-chinese-reader-v1';
+const SAMPLE = '周末，城市慢了下来\n\n周六早上，我走进家附近的一家小书店。窗边坐着几位读者，有人看小说，有人读报纸。店里很安静，只有翻书的声音。\n\n最近，市政府出台了一系列促进消费的措施。一些商店延长了营业时间，银行也推出了新的服务。不过，对我来说，周末最好的安排不是购物，而是找一个安静的地方读书。\n\n读到不认识的词时，我会先试着猜它的意思，再查词典。这样虽然慢一点，却能记得更清楚。学习语言不必着急，每天进步一点就很好。';
+const state = { dictionary: null, text: '', title: '', pins: [], showPins: true, fontSize: 26, current: null, pending: null, reading: false };
+let loadPromise;
+let selectionTimer;
+let lastWordFocus = 0;
+
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+function message(text = '', error = false) { $('app-message').textContent = text; $('app-message').dataset.error = String(error); }
+function overlapping(a, b) { return a.start < b.end && b.start < a.end; }
+function inArticle(lookup) { return lookup && lookup.start >= 0 && state.text.slice(lookup.start, lookup.end) === lookup.text; }
+function pinnable(lookup = state.current) { return inArticle(lookup) && lookup.exact.length > 0 && !lookup.characters && lookup.text.length <= 12; }
+function activeEntry() { return state.current?.exact[state.current.reading || 0]; }
+function currentPin() { return state.current && state.pins.find((pin) => pin.start === state.current.start && pin.end === state.current.end); }
+
+function persist() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ text: state.text, title: state.title, pins: state.pins, showPins: state.showPins, fontSize: state.fontSize }));
+    $('save-status').textContent = 'Saved on this device.';
+  } catch {
+    $('save-status').textContent = 'Browser storage is unavailable. Keep a copy of your text before closing.';
+    message('You can still read, but this browser could not save your text and hints.', true);
+  }
+}
+function restore() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const saved = validSavedState(JSON.parse(raw));
+    if (!saved) { message('The saved reading could not be restored. Paste your text to start a new reading.', true); return; }
+    Object.assign(state, saved);
+    // Only restore pins backed by an actual dictionary reading.
+    state.pins = state.pins.filter((pin) => state.dictionary.lookup(state.text.slice(pin.start, pin.end)).some((entry) => entry.pinyin === pin.pinyin));
+    $('source-text').value = state.text;
+    $('article-title').value = state.title;
+    updateCount();
+    if (state.text.trim()) showReading(false);
+  } catch { message('Saved reading is unavailable. You can still paste and read without saving.', true); }
+}
+function updateCount() { $('text-count').textContent = `${$('source-text').value.length.toLocaleString()} / 30,000`; }
+
+function selectionReset() {
+  state.pending = null;
+  $('lookup-selection').disabled = true;
+  $('lookup-selection').textContent = 'Look up selection';
+}
+function choose(start, end, { focus = false } = {}) {
+  const text = state.text.slice(start, end);
+  if (!text.trim() || text.length > MAX_SELECTION_LENGTH) { message('Select a word or short phrase, up to 120 characters.', true); return; }
+  selectionReset();
+  const selected = state.dictionary.selection(text, start);
+  const pin = state.pins.find((item) => item.start === start && item.end === end);
+  const reading = pin ? Math.max(0, selected.exact.findIndex((entry) => entry.pinyin === pin.pinyin)) : 0;
+  state.current = { ...selected, meaning: false, reading, characters: false };
+  message();
+  renderArticle();
+  renderLookup();
+  $('lookup-panel').scrollTop = 0;
+  if (focus) focusWord(start);
+  if (window.matchMedia('(max-width: 850px)').matches) {
+    window.requestAnimationFrame(() => {
+      const word = $('article').querySelector(`.word[data-start="${start}"]`);
+      if (word) {
+        const rect = word.getBoundingClientRect();
+        const toolbarBottom = document.querySelector('.toolbar').getBoundingClientRect().bottom;
+        if (rect.top < Math.max(0, toolbarBottom) || rect.bottom > $('lookup-panel').getBoundingClientRect().top) word.scrollIntoView({ block: 'center' });
+      }
+    });
+  }
+}
+function search(text) {
+  const query = text.trim();
+  if (!query) { message('Enter a Chinese word or phrase to look up.', true); return; }
+  if (query.length > MAX_SELECTION_LENGTH) { message('Look up at most 120 characters at a time.', true); return; }
+  const index = state.text.indexOf(query);
+  if (index >= 0) choose(index, index + query.length);
+  else {
+    state.current = { ...state.dictionary.selection(query, -1), meaning: false, reading: 0, characters: false };
+    selectionReset(); message(); renderArticle(); renderLookup(); $('lookup-panel').scrollTop = 0;
+  }
+}
+function focusWord(start) {
+  const words = [...$('article').querySelectorAll('.word')];
+  const target = words.find((node) => Number(node.dataset.start) === start) || words[0];
+  for (const word of words) word.tabIndex = word === target ? 0 : -1;
+  target?.focus({ preventScroll: true });
+}
+function renderArticle() {
+  const active = pinnable() ? state.current : null;
+  const overrides = state.pins.filter((pin) => !active || !overlapping(pin, active));
+  if (active) overrides.push(active);
+  const tokens = tokensWithOverrides(state.text, state.dictionary, overrides);
+  const fragment = document.createDocumentFragment();
+  let firstWord = true;
+  for (const token of tokens) {
+    const source = el('span', token.text, 'source-text');
+    source.dataset.start = String(token.start);
+    if (!token.interactive) {
+      // Keep closing punctuation with the preceding word at narrow widths.
+      const previous = fragment.lastElementChild;
+      if (/^[，。！？；：、）】」』》〉〕〗〙〛”’…]+$/u.test(token.text) && previous?.matches('.word, .word-tail')) {
+        let group = previous;
+        if (previous.matches('.word')) {
+          group = el('span', undefined, 'word-tail'); previous.replaceWith(group); group.append(previous);
+        }
+        group.append(source);
+      } else fragment.append(source);
+      continue;
+    }
+    const word = el('span', undefined, 'word');
+    word.dataset.start = String(token.start);
+    word.dataset.end = String(token.end);
+    word.setAttribute('role', 'button');
+    word.tabIndex = firstWord ? 0 : -1;
+    firstWord = false;
+    const selected = inArticle(state.current) && token.start < state.current.end && token.end > state.current.start;
+    const pin = state.pins.find((item) => item.start === token.start && item.end === token.end);
+    word.classList.toggle('is-active', !!selected);
+    word.classList.toggle('is-pinned', !!pin && state.showPins);
+    const reading = active && token.start === active.start && token.end === active.end
+      ? activeEntry()?.pinyin : state.showPins && pin ? pin.pinyin : '';
+    word.append(source);
+    if (reading) {
+      const hint = el('span', reading, 'pronunciation');
+      hint.setAttribute('aria-hidden', 'true');
+      word.append(hint);
+    }
+    word.setAttribute('aria-label', reading ? `${token.text} · ${reading}` : token.text);
+    word.setAttribute('aria-pressed', String(!!selected));
+    fragment.append(word);
+  }
+  $('article').replaceChildren(fragment);
+  $('article').dataset.size = String(state.fontSize);
+  $('font-label').textContent = `${state.fontSize} px`;
+  $('font-smaller').disabled = state.fontSize === 22;
+  $('font-larger').disabled = state.fontSize === 34;
+  $('toggle-hints').disabled = !state.current && !state.pins.length;
+  $('toggle-hints').textContent = state.current || (state.showPins && state.pins.length) ? 'Hide hints' : 'Show pinned hints';
+}
+function definitions(entries, parent) {
+  const list = el('ol', undefined, 'definitions');
+  for (const definition of [...new Set(entries.flatMap((entry) => entry.meanings))]) list.append(el('li', definition));
+  parent.append(list);
+}
+function lookupParts() {
+  const current = state.current;
+  if (!current.characters) return current.parts;
+  const parts = [];
+  let index = 0;
+  for (const character of current.text) {
+    if (hasHan(character)) parts.push({ text: character, start: current.start + index, end: current.start + index + character.length });
+    index += character.length;
+  }
+  return parts;
+}
+function renderLookup() {
+  const current = state.current;
+  $('lookup-empty').hidden = !!current;
+  $('lookup-result').hidden = !current;
+  $('close-lookup').hidden = !current;
+  $('lookup-panel').classList.toggle('has-lookup', !!current);
+  document.body.classList.toggle('lookup-open', !!current);
+  $('meanings').replaceChildren();
+  $('breakdown').replaceChildren();
+  if (current) {
+    const exact = current.exact.length > 0 && !current.characters;
+    $('lookup-word').textContent = current.text;
+    $('lookup-kind').textContent = exact ? 'Dictionary entry' : current.characters ? 'Character breakdown' : 'Phrase breakdown';
+    $('lookup-pinyin').textContent = exact ? activeEntry().pinyin : '';
+    $('lookup-pinyin').hidden = !exact;
+    $('reading-choices').hidden = !exact || current.exact.length < 2;
+    $('pronunciation-choice').replaceChildren();
+    current.exact.forEach((entry, index) => {
+      const option = el('option', `${entry.pinyin}${current.exact.filter((item) => item.pinyin === entry.pinyin).length > 1 ? ` · entry ${index + 1}` : ''}`);
+      option.value = String(index);
+      $('pronunciation-choice').append(option);
+    });
+    $('pronunciation-choice').value = String(current.reading);
+    $('lookup-note').textContent = exact
+      ? current.exact.length > 1 ? 'More than one dictionary reading. Choose the one that fits; this reader does not infer context.' : 'Try recalling the meaning before revealing it.'
+      : current.characters ? 'Character meanings do not always add up to the meaning of the whole word.' : 'No exact dictionary entry for this selection. These are individual word lookups—not a sentence translation.';
+    $('show-meaning').textContent = current.meaning ? 'Hide meaning' : exact ? 'Show meaning' : 'Show meanings';
+    $('show-meaning').setAttribute('aria-expanded', String(current.meaning));
+    $('meanings').hidden = !current.meaning || !exact;
+    $('character-mode').hidden = !hasHan(current.text) || [...current.text].length < 2;
+    $('character-mode').textContent = current.characters ? 'Back to word / phrase' : 'Look at individual characters';
+    $('character-mode').setAttribute('aria-pressed', String(current.characters));
+    $('pin-hint').disabled = !pinnable();
+    $('pin-hint').title = pinnable() ? 'Keep pinyin above this occurrence' : 'Pin an exact dictionary word or short phrase (up to 12 characters) in the article';
+    $('pin-hint').textContent = currentPin() ? 'Unpin pinyin' : 'Pin pinyin';
+    $('pin-hint').setAttribute('aria-pressed', String(!!currentPin()));
+    if (exact && current.meaning) definitions([activeEntry()], $('meanings'));
+    if (!exact) {
+      const parts = lookupParts();
+      if (!parts.length) $('breakdown').append(el('p', 'No Chinese dictionary matches found. Try selecting a shorter Chinese word.', 'fine-print'));
+      for (const part of parts) {
+        const row = el('div', undefined, 'breakdown-item');
+        const button = el('button', part.text, 'part-button');
+        button.type = 'button';
+        button.lang = 'zh-Hans';
+        button.addEventListener('click', () => inArticle(current) ? choose(part.start, part.end) : search(part.text));
+        row.append(button);
+        const entries = state.dictionary.lookup(part.text);
+        row.append(el('span', entries.length ? [...new Set(entries.map((entry) => entry.pinyin))].join(' / ') : 'No entry', 'part-pinyin'));
+        if (current.meaning && entries.length) definitions(entries, row);
+        $('breakdown').append(row);
+      }
+    }
+  }
+  renderPins();
+}
+function renderPins() {
+  $('pin-count').textContent = String(state.pins.length);
+  $('pins-empty').hidden = state.pins.length > 0;
+  $('pin-list').replaceChildren();
+  for (const pin of state.pins.slice().sort((a, b) => a.start - b.start)) {
+    const text = state.text.slice(pin.start, pin.end);
+    const row = el('li');
+    const button = el('button', text, 'pinned-link');
+    button.type = 'button';
+    button.append(el('small', pin.pinyin));
+    button.addEventListener('click', () => { choose(pin.start, pin.end); $('article').querySelector(`.word[data-start="${pin.start}"]`)?.scrollIntoView({ block: 'center' }); });
+    const remove = el('button', '×', 'unpin-button');
+    remove.type = 'button'; remove.setAttribute('aria-label', `Unpin ${text}`);
+    remove.addEventListener('click', () => { state.pins = state.pins.filter((item) => item !== pin); persist(); renderArticle(); renderLookup(); });
+    row.append(button, remove); $('pin-list').append(row);
+  }
+}
+function closeLookup({ focus = false } = {}) {
+  const start = state.current?.start ?? lastWordFocus;
+  state.current = null;
+  selectionReset(); renderArticle(); renderLookup();
+  if (focus) focusWord(start);
+}
+function togglePin() {
+  if (!pinnable()) return;
+  const pin = currentPin();
+  if (pin) state.pins = state.pins.filter((item) => item !== pin);
+  else {
+    state.pins = state.pins.filter((item) => !overlapping(item, state.current));
+    state.pins.push({ start: state.current.start, end: state.current.end, pinyin: activeEntry().pinyin });
+    state.showPins = true;
+  }
+  persist(); renderArticle(); renderLookup();
+}
+
+// Count only original source spans in a DOM selection; visible pinyin is never
+// copied into the lookup, even when a selection crosses a pinned annotation.
+function sourceOffset(container, offset) {
+  const range = document.createRange();
+  range.selectNodeContents($('article'));
+  range.setEnd(container, offset);
+  return [...range.cloneContents().querySelectorAll('.source-text')].reduce((sum, node) => sum + node.textContent.length, 0);
+}
+function updateSelection() {
+  if (!state.reading) return;
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  if (!$('article').contains(range.startContainer) || !$('article').contains(range.endContainer)) return;
+  const isHint = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('.pronunciation');
+  if (isHint(range.startContainer) || isHint(range.endContainer)) return;
+  let start = sourceOffset(range.startContainer, range.startOffset);
+  let end = sourceOffset(range.endContainer, range.endOffset);
+  while (start < end && /\s/u.test(state.text[start])) start++;
+  while (end > start && /\s/u.test(state.text[end - 1])) end--;
+  if (start === end) return;
+  state.pending = { start, end };
+  $('lookup-selection').disabled = end - start > MAX_SELECTION_LENGTH;
+  $('lookup-selection').textContent = end - start > MAX_SELECTION_LENGTH ? 'Select up to 120 characters' : `Look up selection (${[...state.text.slice(start, end)].length})`;
+}
+function showReading(focus = true) {
+  state.reading = true;
+  $('editor').hidden = true; $('reading').hidden = false; $('forget-reading').hidden = false;
+  $('reading-title').textContent = state.title || 'Untitled reading';
+  $('reading-count').textContent = `${[...state.text].filter((character) => hasHan(character)).length.toLocaleString()} Chinese characters`;
+  renderArticle(); renderLookup();
+  if (focus) { $('reading-title').focus({ preventScroll: true }); window.scrollTo({ top: 0 }); }
+}
+function startReading() {
+  if (!state.dictionary) { message('The dictionary is still loading. Please try again in a moment.', true); return; }
+  const text = normalizeText($('source-text').value);
+  if (!text.trim()) { message('Paste some Chinese text first, or try the sample.', true); $('source-text').focus(); return; }
+  if (text.length > MAX_TEXT_LENGTH) { message('Please keep each reading under 30,000 characters.', true); return; }
+  if (text !== state.text) { state.pins = []; state.current = null; state.showPins = true; }
+  state.text = text; state.title = $('article-title').value.trim().slice(0, 120);
+  selectionReset(); message(); persist(); showReading();
+}
+function bindEvents() {
+  $('text-form').addEventListener('submit', (event) => { event.preventDefault(); startReading(); });
+  $('source-text').addEventListener('input', updateCount);
+  $('source-text').addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); startReading(); } });
+  $('sample').addEventListener('click', () => {
+    if ($('source-text').value.trim() && !window.confirm('Replace the text in the paste box with the sample? Your current reading remains available until you start the new one.')) return;
+    $('article-title').value = '周末，城市慢了下来'; $('source-text').value = SAMPLE; updateCount(); $('source-text').focus();
+  });
+  $('edit-text').addEventListener('click', () => {
+    state.reading = false; $('reading').hidden = true; $('editor').hidden = false; document.body.classList.remove('lookup-open');
+    $('source-text').value = state.text; $('article-title').value = state.title; $('resume-reading').hidden = false; updateCount(); window.scrollTo({ top: 0 }); $('source-text').focus();
+  });
+  $('resume-reading').addEventListener('click', () => showReading());
+  $('forget-reading').addEventListener('click', () => {
+    if (!window.confirm('Forget the reader’s saved text and pinned hints on this browser? Your flashcards are not affected.')) return;
+    try { localStorage.removeItem(KEY); } catch { message('This browser could not remove the saved reading.', true); return; }
+    Object.assign(state, { text: '', title: '', pins: [], current: null, pending: null, reading: false, showPins: true });
+    $('source-text').value = ''; $('article-title').value = ''; $('reading').hidden = true; $('editor').hidden = false;
+    $('forget-reading').hidden = true; $('resume-reading').hidden = true; document.body.classList.remove('lookup-open'); updateCount(); message('Saved reading removed from this browser.');
+  });
+  $('article').addEventListener('click', (event) => {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && $('article').contains(selection.anchorNode)) { updateSelection(); return; }
+    const word = event.target.closest('.word');
+    if (word) choose(Number(word.dataset.start), Number(word.dataset.end));
+  });
+  $('article').addEventListener('keydown', (event) => {
+    const word = event.target.closest('.word');
+    if (!word || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(Number(word.dataset.start), Number(word.dataset.end), { focus: true }); }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault(); const words = [...$('article').querySelectorAll('.word')]; const index = words.indexOf(word);
+      const next = words[index + (event.key === 'ArrowRight' ? 1 : -1)];
+      if (next) { lastWordFocus = Number(next.dataset.start); focusWord(lastWordFocus); }
+    }
+  });
+  document.addEventListener('selectionchange', () => { window.clearTimeout(selectionTimer); selectionTimer = window.setTimeout(updateSelection, 40); });
+  $('article').addEventListener('pointerup', updateSelection);
+  $('lookup-selection').addEventListener('mousedown', (event) => event.preventDefault());
+  $('lookup-selection').addEventListener('click', () => { if (state.pending) choose(state.pending.start, state.pending.end); });
+  $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); search($('lookup-input').value); });
+  $('close-lookup').addEventListener('click', () => closeLookup({ focus: !window.matchMedia('(max-width:850px)').matches }));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.current && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) closeLookup({ focus: true }); });
+  $('show-meaning').addEventListener('click', () => { if (state.current) { state.current.meaning = !state.current.meaning; renderLookup(); } });
+  $('pin-hint').addEventListener('click', togglePin);
+  $('character-mode').addEventListener('click', () => { if (state.current) { state.current.characters = !state.current.characters; state.current.meaning = false; renderArticle(); renderLookup(); } });
+  $('pronunciation-choice').addEventListener('change', () => {
+    if (!state.current) return;
+    state.current.reading = Number($('pronunciation-choice').value);
+    const pin = currentPin(); if (pin) { pin.pinyin = activeEntry().pinyin; persist(); }
+    renderArticle(); renderLookup();
+  });
+  $('toggle-hints').addEventListener('click', () => {
+    if (state.current || (state.showPins && state.pins.length)) { state.current = null; state.showPins = false; }
+    else state.showPins = true;
+    selectionReset(); persist(); renderArticle(); renderLookup();
+  });
+  for (const [id, delta] of [['font-smaller', -4], ['font-larger', 4]]) $(id).addEventListener('click', () => { state.fontSize = Math.max(22, Math.min(34, state.fontSize + delta)); renderArticle(); persist(); });
+  $('retry-dictionary').addEventListener('click', () => loadDictionary());
+}
+function registerTools() {
+  const context = document.modelContext || navigator.modelContext;
+  if (!context?.registerTool) return;
+  const tools = [{
+    name: 'look_up_reader_text', title: 'Look up text in Chinese Reader',
+    description: 'Select a word or phrase already in the current reading and reveal its dictionary pinyin, keeping English hidden.',
+    inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false },
+    annotations: { readOnlyHint: false, untrustedContentHint: true },
+    execute({ text }) {
+      if (!state.reading || typeof text !== 'string' || !text.trim() || text.length > MAX_SELECTION_LENGTH) throw new Error('Open a reading and choose up to 120 characters.');
+      const index = state.text.indexOf(text);
+      if (index < 0) throw new Error('The selected text is not in this reading.');
+      choose(index, index + text.length);
+      return { text: state.current.text, pinyin: activeEntry()?.pinyin || null, exactEntry: state.current.exact.length > 0, meaningVisible: false };
+    },
+  }];
+  for (const tool of tools) { try { Promise.resolve(context.registerTool(tool)).catch(() => {}); } catch {} }
+}
+async function loadDictionary() {
+  if (loadPromise) return loadPromise;
+  $('retry-dictionary').hidden = true; $('start-reading').disabled = true;
+  $('dictionary-status').textContent = 'Loading dictionary…';
+  loadPromise = (async () => {
+    try {
+      const response = await fetch('./data/dictionary.json');
+      if (!response.ok) throw new Error(`Dictionary HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.meta?.format !== 1 || !Array.isArray(data.entries) || !data.entries.length) throw new Error('Invalid dictionary');
+      state.dictionary = new Dictionary(data.entries);
+      $('dictionary-status').textContent = `${data.entries.length.toLocaleString()} dictionary entries · ready`;
+      $('start-reading').disabled = false;
+      message(); restore(); registerTools();
+    } catch {
+      $('dictionary-status').textContent = 'Dictionary unavailable'; $('retry-dictionary').hidden = false;
+      message('The dictionary could not load. Check your connection and choose Retry dictionary. Your text has not been uploaded.', true);
+    } finally { loadPromise = null; }
+  })();
+  return loadPromise;
+}
+bindEvents();
+void loadDictionary();

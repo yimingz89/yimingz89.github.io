@@ -1,0 +1,175 @@
+:root { color-scheme: light; --ink:#233631; --muted:#6b7871; --green:#1b6058; --accent:#bd684b; --line:#dfE3d9; --paper:#fffef8; --surface:#f3f4ed; font-family: Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:var(--surface); font-synthesis:none; }
+* { box-sizing:border-box; }
+body { margin:0; min-width:320px; }
+[hidden] { display:none!important; }
+button,input,textarea,select { font:inherit; }
+button,a,input,textarea,select { -webkit-tap-highlight-color:transparent; }
+button { cursor:pointer; }
+button:disabled { cursor:default; opacity:.42; }
+a { color:var(--green); text-underline-offset:4px; }
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible { outline:3px solid #319f96; outline-offset:4px; }
+.sr-only,.skip-link:not(:focus) { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); }
+.skip-link:focus { position:absolute; padding:1rem; z-index:10; background:white; }
+.topbar { min-height:100px; padding:1.5rem clamp(1.25rem,4vw,4rem); display:flex; align-items:center; justify-content:space-between; gap:1rem; background:#142c29; color:#f9f7ee; }
+.brand { display:flex; align-items:center; gap:.9rem; text-decoration:none; color:inherit; font-size:1.08rem; font-weight:650; }
+.brand-symbol { display:grid; place-items:center; width:44px; height:48px; border:1px solid #88a39a; border-radius:12px 12px 12px 2px; font-family:"Songti SC","STSong",serif; font-size:31px; color:#e7c79b; }
+.brand small { display:block; margin-top:6px; font-size:.58rem; letter-spacing:.15em; font-weight:450; color:#a9c1b5; }
+.topbar nav { display:flex; gap:1.6rem; font-size:.8rem; }
+.topbar nav a { color:#d1ded3; text-decoration:none; }
+.topbar nav a:hover { color:white; text-decoration:underline; }
+.shell { max-width:1440px; margin:auto; padding:0 clamp(1.25rem,4vw,4rem) 2rem; }
+.utility-row { display:flex; flex-wrap:wrap; align-items:center; gap:1rem; min-height:66px; font-size:.72rem; color:var(--muted); }
+.privacy-badge { color:var(--green); font-weight:650; letter-spacing:.1em; font-size:.62rem; }
+.privacy-badge span { font-size:.65rem; margin-right:.4rem; }
+#dictionary-status { margin-left:auto; }
+#app-message { margin:0; color:var(--green); font-size:.85rem; }
+#app-message:not(:empty) { padding:.8rem 1rem; margin-bottom:1rem; border:1px solid var(--line); background:var(--paper); border-radius:8px; }
+#app-message[data-error="true"] { color:#a53928; border-color:#e4c5b8; }
+.eyebrow { font-size:.65rem; font-weight:650; letter-spacing:.17em; color:var(--green); margin:0 0 .85rem; }
+h1,h2,p { margin-top:0; }
+.intro { margin:2rem 0 2.1rem; }
+.intro h1 { font:500 clamp(2.8rem,5.5vw,4.4rem)/1.06 Georgia,"Songti SC",serif; letter-spacing:-.06em; margin-bottom:1rem; }
+.intro>p:last-child { color:var(--muted); font-size:.95rem; line-height:1.6; }
+.editor-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(230px,1fr); gap:clamp(2rem,5vw,5rem); align-items:start; }
+.paste-card { background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:clamp(1.3rem,3vw,2rem); box-shadow:0 12px 40px #153e2b06; }
+label { font-size:.8rem; font-weight:600; display:block; }
+.optional { color:#92988e; font-weight:400; margin-left:.35rem; }
+#article-title { width:100%; border:0; border-bottom:1px solid var(--line); padding:.8rem 0; color:var(--ink); background:transparent; margin-bottom:1.7rem; }
+input::placeholder,textarea::placeholder { color:#8e968b; }
+.input-label { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.7rem; }
+#text-count { font-size:.65rem; color:var(--muted); }
+textarea { width:100%; min-height:275px; resize:vertical; border:1px solid var(--line); padding:1rem; border-radius:8px; background:#fafbf5; color:var(--ink); line-height:1.8; font-size:1rem; }
+.fine-print { font-size:.73rem; color:var(--muted); line-height:1.6; margin:.65rem 0 1rem; }
+.editor-actions { display:flex; align-items:center; gap:1.5rem; margin-top:1.2rem; }
+button.primary,button.secondary,.selection-button { border:1px solid var(--green); border-radius:7px; min-height:42px; padding:.65rem 1rem; font-size:.8rem; font-weight:600; }
+button.primary { background:var(--green); color:white; }
+button.primary:not(:disabled):hover { background:#134c46; }
+button.primary span { margin-left:1rem; }
+button.secondary,.selection-button { background:transparent; color:var(--green); border-color:#c8d3c6; }
+button.secondary:not(:disabled):hover,.selection-button:not(:disabled):hover { background:#e8eee3; }
+.text-button { border:0; padding:.35rem 0; color:var(--green); background:transparent; font-size:.77rem; text-decoration:underline; text-underline-offset:4px; }
+#resume-reading { display:block; margin-top:1rem; }
+.guide { padding-top:1.5rem; }
+.guide-demo { display:flex; align-items:end; gap:.4em; padding-top:1.4rem; color:#a8b8a7; font:3.3rem "Songti SC",STSong,serif; }
+.demo-hint { position:relative; color:var(--green); border-bottom:2px solid #d6bc90; }
+.demo-hint small { position:absolute; bottom:100%; left:50%; transform:translateX(-50%); font:italic .95rem Georgia,serif; color:var(--accent); }
+.guide h2 { font:500 1.8rem/1.18 Georgia,serif; margin:1.4rem 0 1.6rem; letter-spacing:-.025em; }
+.guide ol { list-style:none; padding:0; counter-reset:steps; }
+.guide li { position:relative; padding-left:2rem; margin-bottom:1.3rem; counter-increment:steps; font-size:.85rem; line-height:1.5; }
+.guide li::before { content:"0" counter(steps); position:absolute; left:0; top:.1rem; color:#8b988b; font-size:.65rem; letter-spacing:.05em; }
+.guide li strong { font-weight:600; display:block; margin-bottom:.25rem; }
+.guide li span { font-size:.8rem; color:var(--muted); }
+.guide-note { padding-top:1.2rem; border-top:1px solid var(--line); font-size:.75rem; color:var(--muted); line-height:1.6; }
+.reading-heading { display:flex; justify-content:space-between; gap:1.5rem; align-items:center; margin:1.3rem 0 1.8rem; }
+.reading-heading h1 { font:500 clamp(1.65rem,3vw,2.3rem)/1.3 Georgia,"Songti SC",serif; margin:0; overflow-wrap:anywhere; }
+.reading-heading>button { flex:none; }
+.workspace { display:grid; grid-template-columns:minmax(0,1fr) 315px; gap:1.8rem; align-items:start; }
+.paper-column { min-width:0; }
+.toolbar { display:flex; align-items:center; gap:1rem; min-height:62px; padding:0 .1rem .9rem; flex-wrap:wrap; }
+.toolbar { position:sticky; top:0; z-index:3; background:var(--surface); padding-top:.6rem; }
+.font-controls { display:flex; align-items:center; gap:.5rem; margin-right:auto; }
+.font-controls button { border:0; background:#e6eadd; border-radius:5px; padding:.45rem .6rem; color:var(--ink); min-height:36px; }
+#font-label { font-size:.65rem; color:var(--muted); min-width:34px; text-align:center; }
+.selection-button { font-size:.72rem; min-height:36px; padding:.45rem .6rem; }
+.paper { padding:clamp(1.4rem,3.5vw,3.25rem); border:1px solid #e0e2d4; border-radius:12px; background:var(--paper); min-height:500px; }
+.paper-meta { display:flex; justify-content:space-between; color:#8b9588; font-size:.63rem; letter-spacing:.08em; padding-bottom:1.4rem; border-bottom:1px solid #ececdf; margin-bottom:1.2rem; }
+.reading-instructions { color:#8b9487; font-size:.72rem; line-height:1.6; margin-bottom:1.8rem; }
+#article { font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; font-weight:400; line-height:2.55; font-size:26px; white-space:pre-wrap; overflow-wrap:anywhere; color:#28372c; }
+#article[data-size="22"] { font-size:22px; }
+#article[data-size="30"] { font-size:30px; }
+#article[data-size="34"] { font-size:34px; }
+.word { display:inline-block; position:relative; line-height:1.65; max-width:100%; vertical-align:baseline; border-radius:3px; cursor:pointer; user-select:text; -webkit-user-select:text; }
+.word-tail { display:inline-block; max-width:100%; }
+.word:hover { background:#f0f0dd; }
+.word.is-active { background:#e0ece1; box-shadow:0 2px 0 #2b7563; }
+.word.is-pinned:not(.is-active) { box-shadow:0 1px 0 #caaa7e; }
+.pronunciation { position:absolute; left:50%; bottom:100%; transform:translateX(-50%); font:500 11px/1.15 ui-sans-serif,system-ui,sans-serif; color:var(--accent); white-space:nowrap; pointer-events:none; user-select:none; -webkit-user-select:none; }
+.paper-end { display:flex; align-items:center; gap:1rem; justify-content:center; margin-top:2.8rem; color:#c1c9b9; font:1.2rem "Songti SC",serif; }
+.paper-end span:first-child,.paper-end span:last-child { width:30px; height:1px; background:#e1e5d6; }
+.lookup-panel { position:sticky; top:1.1rem; padding:1.35rem; border:1px solid var(--line); background:#fcfcf6; border-radius:12px; max-height:calc(100dvh - 2.2rem); overflow:auto; }
+.panel-top { display:flex; align-items:center; gap:.5rem; justify-content:space-between; margin-bottom:1rem; }
+.panel-top .eyebrow { font-size:.59rem; margin:0; }
+.icon-button { width:32px; height:32px; padding:0; background:#e9eee3; border:0; color:var(--ink); border-radius:50%; font-size:1.35rem; flex:none; }
+.lookup-form { display:flex; border:1px solid #d8dfd0; border-radius:6px; overflow:hidden; margin-bottom:1.6rem; }
+.lookup-form input { min-width:0; width:100%; background:white; border:0; padding:.7rem .6rem; font-size:.76rem; }
+.lookup-form button { border:0; background:white; color:var(--green); padding:0 .8rem; font-size:1.3rem; }
+.lookup-empty { text-align:center; padding:1.3rem 0 2rem; }
+.lookup-empty>span { font:4rem "Songti SC",serif; color:#b8c5b2; }
+.lookup-empty h2 { font:500 1.2rem/1.4 Georgia,serif; margin:1rem 0 .6rem; }
+.lookup-empty p { font-size:.78rem; color:var(--muted); line-height:1.7; }
+.result-kind { font-size:.62rem; text-transform:uppercase; letter-spacing:.11em; color:var(--muted); }
+#lookup-word { font-family:"PingFang SC","Microsoft YaHei",sans-serif; font-size:2rem; font-weight:500; line-height:1.5; margin:.6rem 0 .2rem; overflow-wrap:anywhere; }
+#lookup-pinyin { color:var(--accent); font-size:1rem; margin-bottom:1.2rem; line-height:1.6; }
+#reading-choices label { font-size:.68rem; font-weight:400; margin-bottom:.3rem; color:var(--muted); }
+#pronunciation-choice { width:100%; padding:.45rem; border:1px solid var(--line); border-radius:5px; background:var(--paper); color:var(--ink); }
+.lookup-actions { display:flex; gap:.55rem; flex-wrap:wrap; }
+.lookup-actions button { padding:.6rem .7rem; font-size:.72rem; min-height:38px; }
+.character-mode { margin:.7rem 0; font-size:.7rem; }
+#meanings { border-top:1px solid var(--line); padding-top:1rem; margin-top:1rem; font-size:.86rem; line-height:1.65; }
+.definitions { padding-left:1.2rem; margin:0; }
+.definitions li { padding-left:.25rem; margin-bottom:.5rem; overflow-wrap:anywhere; }
+.breakdown-item { padding:.7rem 0; border-top:1px solid var(--line); }
+.part-button { border:0; background:none; color:var(--green); font-size:1.1rem; padding:0; margin-right:.8rem; }
+.part-pinyin { color:var(--accent); font-size:.78rem; }
+.breakdown-item .definitions { font-size:.79rem; margin-top:.65rem; line-height:1.6; }
+.pins-disclosure { border-top:1px solid var(--line); margin-top:1.4rem; padding-top:1.1rem; font-size:.76rem; }
+summary { cursor:pointer; line-height:1.6; }
+#pin-count { color:var(--green); background:#e6eddf; border-radius:12px; padding:.08rem .45rem; margin-left:.2rem; font-size:.65rem; }
+#pin-list { padding:0; list-style:none; }
+#pin-list li { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e9ebdf; padding:.45rem 0; gap:.5rem; }
+.pinned-link { border:0; background:none; color:var(--green); font-size:.85rem; text-align:left; }
+.pinned-link small { display:block; color:var(--accent); font-size:.66rem; margin-top:.2rem; }
+.unpin-button { border:0; background:none; color:var(--muted); font-size:1rem; padding:.5rem; }
+.dictionary-note { font-size:.64rem; line-height:1.65; color:#8a9587; margin:1.3rem 0 0; }
+.reading-help { font-size:.68rem; color:var(--muted); line-height:1.8; margin-top:1.4rem; }
+#save-status { margin-left:.5rem; }
+footer { border-top:1px solid var(--line); margin-top:3.5rem; padding-top:1.5rem; font-size:.7rem; color:var(--muted); line-height:1.7; display:flex; align-items:start; justify-content:space-between; gap:2rem; }
+footer>p { max-width:60%; }
+footer details { max-width:430px; }
+footer details p { margin-top:.7rem; }
+footer .text-button { font-size:inherit; margin-left:.5rem; }
+@media(min-width:1300px) { .workspace { grid-template-columns:minmax(0,1fr) 345px; gap:2.4rem; } }
+@media(max-width:850px) {
+  .topbar { min-height:80px; }
+  .brand small { display:none; }
+  .workspace { display:block; }
+  .editor-grid { grid-template-columns:minmax(0,1fr) 240px; gap:2rem; }
+  .guide h2 { font-size:1.5rem; }
+  .lookup-panel { position:static; max-height:none; margin-top:1.5rem; }
+  .lookup-panel.has-lookup { position:fixed; z-index:5; bottom:0; top:auto; left:0; right:0; border-radius:18px 18px 0 0; max-height:43dvh; padding:1rem 1.5rem calc(1rem + env(safe-area-inset-bottom)); box-shadow:0 -10px 45px #243d2924; margin:0; overscroll-behavior:contain; }
+  .has-lookup .lookup-form { display:none; }
+  .has-lookup .panel-top { margin-bottom:.6rem; }
+  .has-lookup #lookup-word { font-size:1.65rem; }
+  .has-lookup .pins-disclosure,.has-lookup .dictionary-note { display:none; }
+  body.lookup-open { padding-bottom:43dvh; }
+  footer { flex-direction:column; gap:.5rem; }
+  footer>p { max-width:none; }
+}
+@media(max-width:640px) {
+  .topbar { padding:1rem; flex-wrap:wrap; }
+  .brand { font-size:.95rem; gap:.6rem; }
+  .brand-symbol { width:34px; height:38px; font-size:26px; }
+  .topbar nav { gap:1rem; font-size:.65rem; }
+  .shell { padding:0 1rem 1.5rem; }
+  .utility-row { gap:.6rem; min-height:58px; font-size:.63rem; }
+  .privacy-badge { font-size:.55rem; }
+  .intro { margin:1.2rem 0 1.5rem; }
+  .intro h1 { font-size:2.9rem; }
+  .intro>p:last-child { font-size:.85rem; max-width:300px; }
+  .editor-grid { display:block; }
+  .paste-card { padding:1.1rem; }
+  textarea { min-height:230px; }
+  .guide { padding-top:2rem; }
+  .guide-demo { display:none; }
+  .guide h2 br { display:none; }
+  .guide li { margin-bottom:1rem; }
+  .toolbar { gap:.8rem; }
+  .paper { padding:1.15rem; border-radius:9px; }
+  .reading-heading { margin-top:.5rem; gap:.6rem; }
+  .reading-heading .secondary { font-size:.7rem; padding:.5rem .65rem; }
+  .reading-heading .eyebrow { font-size:.57rem; }
+  .reading-instructions { font-size:.65rem; }
+  .pronunciation { font-size:10px; }
+  footer { margin-top:2rem; }
+}
+@media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important; } }

@@ -25,3 +25,4 @@ exclude:
   - README.md
   - tests
   - firebase
+  - reader/build-dictionary.mjs

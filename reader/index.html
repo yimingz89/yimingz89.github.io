@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Read simplified Chinese with pinyin and English dictionary help, only when you need it." />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <title>Chinese Reader · Yiming’s Study Tools</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%231b6058'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23fffaf0'%3E读%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css?v=1" />
+  <script type="module" src="./app.mjs?v=1"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to reader</a>
+  <header class="topbar">
+    <a class="brand" href="./"><span class="brand-symbol" lang="zh-Hans" aria-hidden="true">读</span><span>Chinese Reader<small>A LITTLE HELP, ONLY WHEN YOU NEED IT</small></span></a>
+    <nav aria-label="Study tools"><a href="../">Yiming’s website</a><a href="../flashcards/">Flashcards <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main" class="shell">
+    <div class="utility-row"><span class="privacy-badge"><span aria-hidden="true">●</span> ON YOUR DEVICE</span><span id="dictionary-status" role="status">Loading dictionary…</span><button id="retry-dictionary" class="text-button" type="button" hidden>Retry dictionary</button></div>
+    <p id="app-message" role="status" aria-live="polite"></p>
+
+    <section id="editor" aria-labelledby="editor-heading">
+      <div class="intro"><p class="eyebrow">YOUR CHINESE, AT YOUR PACE</p><h1 id="editor-heading">Stay with the story.</h1><p>Read first. Reveal a pronunciation or a meaning when you need a little help.</p></div>
+      <div class="editor-grid">
+        <form id="text-form" class="paste-card">
+          <label for="article-title">Title <span class="optional">optional</span></label>
+          <input id="article-title" type="text" maxlength="120" placeholder="What are you reading?" autocomplete="off" />
+          <div class="input-label"><label for="source-text">Paste simplified Chinese</label><span id="text-count">0 / 30,000</span></div>
+          <textarea id="source-text" lang="zh-Hans" maxlength="30000" placeholder="把你想读的中文粘贴在这里……" spellcheck="false" aria-describedby="paste-help"></textarea>
+          <p id="paste-help" class="fine-print">Plain text only. Your text stays in this browser—no account or upload.</p>
+          <div class="editor-actions"><button id="start-reading" class="primary" type="submit" disabled>Start reading <span aria-hidden="true">→</span></button><button id="sample" class="text-button" type="button">Try a sample</button></div>
+          <button id="resume-reading" class="text-button" type="button" hidden>Return to your reading</button>
+        </form>
+        <aside class="guide" aria-label="How it works">
+          <div class="guide-demo" aria-hidden="true"><span>慢</span><span class="demo-hint"><small>màn</small>慢</span><span>读</span></div>
+          <h2>Less translating.<br />More reading.</h2>
+          <ol><li><strong>Tap a word.</strong><span>See its pinyin. The rest of the text stays clean.</span></li><li><strong>Need the meaning?</strong><span>Reveal English definitions, or select a phrase to look it up.</span></li><li><strong>Keep a small hint.</strong><span>Pin pinyin above a word, then hide your hints to try again.</span></li></ol>
+          <p class="guide-note">A dictionary, not an automatic translator. No AI. No API keys. No usage charges.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="reading" aria-label="Reading workspace" hidden>
+      <div class="reading-heading"><div><p class="eyebrow">READ & DISCOVER</p><h1 id="reading-title" tabindex="-1">Untitled reading</h1></div><button id="edit-text" class="secondary" type="button">Edit text</button></div>
+      <div class="workspace">
+        <div class="paper-column">
+          <div class="toolbar" aria-label="Reading controls">
+            <div class="font-controls"><button id="font-smaller" type="button" aria-label="Smaller Chinese text">A−</button><span id="font-label">26 px</span><button id="font-larger" type="button" aria-label="Larger Chinese text">A+</button></div>
+            <button id="toggle-hints" class="text-button" type="button" disabled>Hide hints</button>
+            <button id="lookup-selection" class="selection-button" type="button" disabled>Look up selection</button>
+          </div>
+          <div class="paper">
+            <div class="paper-meta"><span id="reading-count"></span><span>简体中文</span></div>
+            <p class="reading-instructions">Tap a word for pinyin. Drag to select a phrase, then choose “Look up selection.” On a phone, long-press to select.</p>
+            <article id="article" lang="zh-Hans" aria-label="Chinese reading text" data-size="26"></article>
+            <div class="paper-end"><span></span><span aria-hidden="true">读</span><span></span></div>
+          </div>
+        </div>
+
+        <aside id="lookup-panel" class="lookup-panel" aria-label="Dictionary lookup">
+          <div class="panel-top"><span class="eyebrow">YOUR READING COMPANION</span><button id="close-lookup" class="icon-button" type="button" aria-label="Close lookup" hidden>×</button></div>
+          <form id="lookup-form" class="lookup-form"><label class="sr-only" for="lookup-input">Look up a Chinese word or phrase</label><input id="lookup-input" lang="zh-Hans" type="text" maxlength="120" placeholder="Look up a word or phrase…" autocomplete="off" /><button type="submit" aria-label="Search dictionary">↵</button></form>
+          <div id="lookup-empty" class="lookup-empty"><span lang="zh-Hans" aria-hidden="true">知</span><h2>A word worth pausing for?</h2><p>Tap it in the text.<br />Pinyin first, meaning when you ask.</p></div>
+          <div id="lookup-result" hidden>
+            <p id="lookup-kind" class="result-kind"></p>
+            <h2 id="lookup-word" lang="zh-Hans" tabindex="-1"></h2>
+            <p id="lookup-pinyin" lang="zh-Latn-pinyin"></p>
+            <div id="reading-choices" hidden><label for="pronunciation-choice">Dictionary readings</label><select id="pronunciation-choice"></select></div>
+            <p id="lookup-note" class="fine-print"></p>
+            <div class="lookup-actions"><button id="show-meaning" class="primary" type="button" aria-expanded="false" aria-controls="meanings">Show meaning</button><button id="pin-hint" class="secondary" type="button" aria-pressed="false">Pin pinyin</button></div>
+            <button id="character-mode" class="text-button character-mode" type="button" aria-pressed="false">Look at individual characters</button>
+            <div id="meanings" hidden></div>
+            <div id="breakdown"></div>
+          </div>
+          <details id="pins-disclosure" class="pins-disclosure"><summary>Pinned on this page <span id="pin-count">0</span></summary><p id="pins-empty" class="fine-print">Pin a word’s pinyin to keep it above that occurrence.</p><ul id="pin-list"></ul></details>
+          <p class="dictionary-note">Dictionary definitions, not contextual translations. Names, new slang, and word boundaries may need a closer look.</p>
+        </aside>
+      </div>
+      <p class="reading-help">Keyboard: Tab into the text, use ← / → to move between words, Enter to look up, Esc to close. <span id="save-status">Saved on this device.</span></p>
+    </section>
+    <footer><p>No login. No text uploads. Reading text and pins stay in this browser, not across devices. <button id="forget-reading" class="text-button" type="button" hidden>Forget saved reading</button></p><details><summary>Dictionary & credits</summary><p>Dictionary data: <a href="https://www.mdbg.net/chinese/dictionary?page=cc-cedict" target="_blank" rel="noopener noreferrer">CC-CEDICT / MDBG and contributors</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Reformatted for local lookup; original definitions preserved. <a href="./data/dictionary.json" download>Download dictionary data</a> · <a href="./data/NOTICE.txt">Attribution & changes</a>.</p></details></footer>
+  </main>
+  <noscript>This reader needs JavaScript for local dictionary lookup. Your text is not sent to a server.</noscript>
+</body>
+</html>

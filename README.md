@@ -45,6 +45,21 @@ for headings, paragraphs, and lists.
 - `.github/workflows/jekyll.yml` — GitHub Pages build and deployment
 - `styles.css` — all site styling
 - `flashcards/` — standalone Hanzi Study app and its character dataset
+- `reader/` — browser-only Chinese Reader and bundled CC-CEDICT dictionary
+
+## Chinese Reader
+
+[Chinese Reader](https://yimingz89.github.io/reader/) is a separate study tool linked from the site sidebar. Paste simplified Chinese (up to 30,000 characters), then start reading. Tap a word to reveal just its pinyin; choose **Show meaning** for English dictionary definitions. Select a phrase and use **Look up selection** for exact phrase entries or an explicitly labeled word-by-word breakdown. There is no automatic sentence translation or contextual AI.
+
+**Pin pinyin** keeps the pronunciation above that occurrence. **Hide hints** hides all hints without deleting pins. The pinned list lets you revisit or remove them. Ambiguous dictionary readings can be selected manually, and individual-character lookup is available. The layout adapts to phones, where lookup opens in a bottom sheet.
+
+The last started reading, pinned hints, and text-size setting are stored in this browser's local storage. Normal reloads and hard refreshes preserve them; clearing site data, private browsing, or browser storage eviction can remove them. They do **not** sync across browsers/devices. Starting a different text clears that reading's pins. **Forget saved reading** removes only the reader's saved data; the flashcard app and its Firebase sync are independent and unchanged.
+
+No login, Firebase, AI model, paid API, analytics, external fonts, or secret API key is used by the reader. Pasted text is rendered as plain text and is never uploaded. The browser downloads a bundled dictionary (~10 MB before compression); dictionary lookups happen locally after loading. Loading/reloading the page still requires a connection unless the browser happens to have its assets cached.
+
+To preview from the repository root, run `python3 -m http.server 4174 --bind 127.0.0.1` and open `http://127.0.0.1:4174/reader/`. No build or npm install is needed to use the app. For development tests, use Node 24.15+ (24.x), run `npm ci` inside `tests/`, then `npm test`. This runs reader and flashcard regressions without contacting Firebase.
+
+The dictionary is [CC-CEDICT / MDBG](https://www.mdbg.net/chinese/dictionary?page=cc-cedict), distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Attribution and conversion details are in `reader/data/NOTICE.txt` and the app's **Dictionary & credits** section. To update it, download the official CC-CEDICT v1 gzip and run `node reader/build-dictionary.mjs /path/to/cedict.txt.gz`; update the release date in the notice and run tests. The reader keeps dictionary alternatives but does not infer contextual pronunciations, tone sandhi, or translations; segmentation and name/slang coverage are imperfect.
 
 ## Hanzi flashcards
 
