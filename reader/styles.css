@@ -100,6 +100,18 @@ button.secondary:not(:disabled):hover,.selection-button:not(:disabled):hover { b
 .result-kind { font-size:.62rem; text-transform:uppercase; letter-spacing:.11em; color:var(--muted); }
 #lookup-word { font-family:"PingFang SC","Microsoft YaHei",sans-serif; font-size:2rem; font-weight:500; line-height:1.5; margin:.6rem 0 .2rem; overflow-wrap:anywhere; }
 #lookup-pinyin { color:var(--accent); font-size:1rem; margin-bottom:1.2rem; line-height:1.6; }
+.word-levels { margin:.8rem 0 1.15rem; }
+.level-badges { display:flex; flex-wrap:wrap; gap:.4rem; }
+.level-badge { font-size:.65rem; font-weight:550; line-height:1.5; border:1px solid #cdded1; border-radius:5px; padding:.25rem .5rem; background:#eaf1e7; color:#285d47; }
+.frequency-badge { background:#f3ecdf; border-color:#e1d5bd; color:#765331; }
+.level-badge.is-unlisted { background:transparent; border-color:var(--line); color:var(--muted); font-weight:400; }
+.level-status { font-size:.72rem; line-height:1.5; color:var(--muted); margin:0; }
+#level-details { font-size:.67rem; color:var(--muted); margin-top:.6rem; line-height:1.65; }
+#level-details summary { text-decoration:underline; text-underline-offset:3px; }
+#level-details p { margin:.65rem 0; }
+#level-details strong { font-weight:600; }
+.part-levels { margin-top:.5rem; }
+.part-levels .level-badge { font-size:.6rem; padding:.15rem .4rem; }
 #reading-choices label { font-size:.68rem; font-weight:400; margin-bottom:.3rem; color:var(--muted); }
 #pronunciation-choice { width:100%; padding:.45rem; border:1px solid var(--line); border-radius:5px; background:var(--paper); color:var(--ink); }
 .lookup-actions { display:flex; gap:.55rem; flex-wrap:wrap; }

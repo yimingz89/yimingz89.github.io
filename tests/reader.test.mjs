@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { Dictionary, pinyinMarks, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from '../reader/dictionary.mjs';
+import { WordLevels, frequencyBand } from '../reader/levels.mjs';
 
 const rows = [
   ['银行', 'yin2 hang2', 'bank', '銀行'], ['银', 'yin2', 'silver', '銀'],
@@ -14,11 +15,15 @@ const rows = [
   ['人', 'ren2', 'person', '人'], ['绿', 'lu:4', 'green', '綠'], ['学习', 'xue2 xi2', 'to study', '學習'],
 ];
 const fixture = new Dictionary(rows);
+const levelData = { meta: { format: 1, hskEdition: 'HSK 3.0 (2021)' }, entries: [
+  ['银行', 2, 5.34], ['政府', 4, 5.71], ['出台', 7, 4.32], ['措施', 5, 4.83],
+  ['不约而同', 7, 3.11], ['行', 1, 5.86], ['辱', null, 3.56], ['侮辱', 7, 4.26],
+] };
 const html = readFileSync(new URL('../reader/index.html', import.meta.url), 'utf8');
-const source = readFileSync(new URL('../reader/app.mjs', import.meta.url), 'utf8').replace(/^import .*;\n/, '');
+const source = readFileSync(new URL('../reader/app.mjs', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '');
 const KEY = 'yiming-chinese-reader-v1';
 
-async function app(t, { stored, failFetch = false, failSave = false, mobile = false } = {}) {
+async function app(t, { stored, failFetch = false, failSave = false, mobile = false, failLevels = false, invalidLevels = false, deferLevels = false } = {}) {
   const errors = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', (error) => errors.push(error.message));
@@ -27,7 +32,10 @@ async function app(t, { stored, failFetch = false, failSave = false, mobile = fa
   const { window } = dom;
   const requests = [];
   let requestsFail = failFetch;
-  Object.assign(window, { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides });
+  let levelsFail = failLevels;
+  let releaseLevels;
+  const levelGate = deferLevels ? new Promise((resolve) => { releaseLevels = resolve; }) : Promise.resolve();
+  Object.assign(window, { Dictionary, WordLevels, frequencyBand, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides });
   window.matchMedia = () => ({ matches: mobile });
   window.scrollTo = () => {};
   window.HTMLElement.prototype.scrollIntoView = () => {};
@@ -37,6 +45,12 @@ async function app(t, { stored, failFetch = false, failSave = false, mobile = fa
   if (failSave) window.Storage.prototype.setItem = () => { throw new Error('Quota exceeded'); };
   window.fetch = async (url, options) => {
     requests.push({ url, options });
+    if (url === './data/levels.json?v=1') {
+      await levelGate;
+      if (levelsFail) throw new Error('levels offline');
+      return { ok: true, json: async () => invalidLevels ? { meta: {} } : levelData };
+    }
+    assert.equal(url, './data/dictionary.json');
     if (requestsFail) throw new Error('offline');
     return { ok: true, json: async () => ({ meta: { format: 1 }, entries: rows }) };
   };
@@ -45,11 +59,14 @@ async function app(t, { stored, failFetch = false, failSave = false, mobile = fa
   const context = dom.getInternalVMContext();
   vm.runInContext(source, context);
   await vm.runInContext('loadPromise', context);
+  if (!deferLevels) await vm.runInContext('levelsPromise', context);
   const get = (id) => window.document.getElementById(id);
   return {
     window, get, errors, requests, tools,
     run: (code) => vm.runInContext(code, context),
     recoverFetch: () => { requestsFail = false; },
+    recoverLevels: () => { levelsFail = false; },
+    async finishLevels() { releaseLevels(); await vm.runInContext('levelsPromise', context); },
     open(text = '政府出台了措施。银行学习。', title = 'Test reading') {
       get('source-text').value = text; get('article-title').value = title;
       get('text-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
@@ -185,7 +202,7 @@ test('manual dictionary search is local and outside words cannot be pinned onto 
   a.get('lookup-form').dispatchEvent(new a.window.Event('submit', { cancelable: true }));
   assert.equal(a.get('lookup-word').textContent, '银行');
   assert.equal(a.get('pin-hint').disabled, true);
-  assert.deepEqual(a.requests, [{ url: './data/dictionary.json', options: undefined }]);
+  assert.deepEqual(a.requests, [{ url: './data/dictionary.json', options: undefined }, { url: './data/levels.json?v=1', options: undefined }]);
 });
 
 test('punctuation stays with words; repeated-word pins affect only the chosen occurrence', async (t) => {
@@ -216,7 +233,7 @@ test('untrusted pasted HTML and titles are rendered as text, never as markup or 
   assert.equal(a.sourceText(), text);
   assert.equal(a.get('article').querySelector('img,script,svg'), null);
   assert.equal(a.get('reading-title').querySelector('svg'), null);
-  assert.equal(a.requests.length, 1);
+  assert.equal(a.requests.length, 2);
   assert.match(html, /connect-src 'self'/);
   assert.doesNotMatch(source, /firebase|googleapis|innerHTML|outerHTML|eval\(/);
 });
@@ -269,4 +286,89 @@ test('bundled production dictionary includes provenance and real simplified word
   assert.ok(dictionary.lookup('出台').some((entry) => entry.meanings.some((meaning) => meaning.includes('policy'))));
   const text = '政府出台了一系列促进消费的措施。';
   assert.equal(dictionary.segment(text).map((part) => part.text).join(''), text);
+});
+
+test('ratings require exact word matches and valid, edition-tagged values', () => {
+  const levels = new WordLevels(levelData);
+  assert.deepEqual(levels.lookup('银行'), { hsk: 2, zipf: 5.34 });
+  assert.deepEqual(levels.lookup('银行政府'), { hsk: null, zipf: null });
+  assert.deepEqual(levels.lookup('__proto__'), { hsk: null, zipf: null });
+  for (const [score, band] of [[6, 'Extremely common'], [5, 'Very common'], [4, 'Common'], [3, 'Less common'], [2.99, 'Rare'], [0, null], [null, null], [NaN, null]]) assert.equal(frequencyBand(score), band);
+  assert.throws(() => new WordLevels({ ...levelData, meta: { format: 1, hskEdition: 'HSK 2.0' } }));
+  for (const row of [['字', 8, 4], ['字', 1, 0], ['字', 1, '4'], ['字', 1]]) assert.throws(() => new WordLevels({ ...levelData, entries: [row] }));
+});
+
+test('word levels are visible before English; advanced band and details are explicit', async (t) => {
+  const a = await app(t); a.open('银行不约而同。'); a.select('银行');
+  assert.match(a.get('level-badges').textContent, /HSK 3.0 · 2/);
+  assert.match(a.get('level-badges').textContent, /Freq · Very common/);
+  assert.match(a.get('level-exact-note').textContent, /Zipf 5.34/);
+  assert.match(a.get('level-details').textContent, /2021 vocabulary standard/);
+  assert.equal(a.get('meanings').hidden, true);
+  assert.equal(a.get('meanings').textContent, '');
+  a.get('level-details').open = true;
+  a.select('不约而同');
+  assert.equal(a.get('level-details').open, false);
+  assert.match(a.get('level-badges').textContent, /HSK 3.0 · 7–9/);
+  a.get('show-meaning').click(); a.get('pin-hint').click();
+  assert.match(a.get('level-badges').textContent, /Less common/);
+  assert.equal(a.get('pin-count').textContent, '1');
+});
+
+test('unlisted is not advanced, unknown frequency is not rare, and breakdowns rate their own words', async (t) => {
+  const a = await app(t); a.open('辱。政府出台措施。𠮷。'); a.select('辱');
+  assert.match(a.get('level-badges').textContent, /HSK · Not listed/);
+  assert.match(a.get('level-badges').textContent, /Less common/);
+  a.select('政府出台措施');
+  assert.match(a.get('level-badges').textContent, /Frequency · Unknown/);
+  assert.doesNotMatch(a.get('level-badges').textContent, /HSK 3.0 · \d|Rare/);
+  const parts = [...a.get('breakdown').querySelectorAll('.breakdown-item')];
+  assert.match(parts[0].textContent, /政府.*HSK 3.0 · 4/);
+  assert.match(parts[1].textContent, /出台.*HSK 3.0 · 7–9/);
+  assert.equal(a.get('breakdown').querySelector('.definitions'), null);
+  a.select('𠮷');
+  assert.match(a.get('level-badges').textContent, /Frequency · Unknown/);
+});
+
+test('slow word-level loading does not block reading or change existing pins', async (t) => {
+  const a = await app(t, { deferLevels: true }); a.open('银行。'); a.select('银行');
+  assert.equal(a.get('start-reading').disabled, false);
+  assert.match(a.get('level-status').textContent, /Loading word levels/);
+  a.get('pin-hint').click(); a.get('show-meaning').click();
+  const saved = a.window.localStorage.getItem(KEY);
+  await a.finishLevels();
+  assert.match(a.get('level-badges').textContent, /HSK 3.0 · 2/);
+  assert.equal(a.get('meanings').hidden, false);
+  assert.equal(a.get('pin-count').textContent, '1');
+  assert.equal(a.window.localStorage.getItem(KEY), saved);
+});
+
+test('ratings network or format errors leave dictionary usable and offer retry', async (t) => {
+  for (const options of [{ failLevels: true }, { invalidLevels: true }]) {
+    const a = await app(t, options); a.open('银行。'); a.select('银行');
+    assert.equal(a.get('lookup-pinyin').textContent, 'yín háng');
+    assert.match(a.get('level-status').textContent, /unavailable/);
+    assert.equal(a.get('retry-levels').hidden, false);
+    assert.equal(a.get('level-badges').textContent, '');
+    if (options.failLevels) {
+      a.recoverLevels(); await a.run('loadLevels()');
+      assert.equal(a.get('retry-levels').hidden, true);
+      assert.match(a.get('level-badges').textContent, /HSK 3.0 · 2/);
+    }
+    assert.deepEqual(a.errors, []);
+  }
+});
+
+test('production ratings carry licenses and do not conflate character, word, or HSK editions', () => {
+  const data = JSON.parse(readFileSync(new URL('../reader/data/levels.json', import.meta.url), 'utf8'));
+  assert.equal(data.meta.entries, data.entries.length);
+  assert.ok(data.entries.length > 80000);
+  assert.match(data.meta.hsk.license, /MIT License/);
+  assert.match(data.meta.frequency.originalDocumentationAndAttribution, /SUBTLEX/);
+  assert.match(data.meta.frequency.originalDocumentationAndAttribution, /Robyn Speer/);
+  const levels = new WordLevels(data);
+  assert.deepEqual(levels.lookup('辱'), { hsk: null, zipf: 3.56 });
+  assert.deepEqual(levels.lookup('侮辱'), { hsk: 7, zipf: 4.26 });
+  assert.deepEqual(levels.lookup('银行'), { hsk: 2, zipf: 5.34 });
+  assert.deepEqual(levels.lookup('政府出台措施'), { hsk: null, zipf: null });
 });

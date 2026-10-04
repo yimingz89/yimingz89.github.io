@@ -8,8 +8,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Chinese Reader · Yiming’s Study Tools</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%231b6058'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23fffaf0'%3E读%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=1" />
-  <script type="module" src="./app.mjs?v=1"></script>
+  <link rel="stylesheet" href="./styles.css?v=2" />
+  <script type="module" src="./app.mjs?v=2"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to reader</a>
@@ -67,6 +67,12 @@
             <p id="lookup-kind" class="result-kind"></p>
             <h2 id="lookup-word" lang="zh-Hans" tabindex="-1"></h2>
             <p id="lookup-pinyin" lang="zh-Latn-pinyin"></p>
+            <section id="word-levels" class="word-levels" aria-label="Word level and frequency">
+              <div id="level-badges" class="level-badges"></div>
+              <p id="level-status" class="level-status" role="status"></p>
+              <button id="retry-levels" class="text-button" type="button" hidden>Retry word levels</button>
+              <details id="level-details"><summary>About these ratings</summary><p id="level-exact-note"></p><p><strong>HSK 3.0 (2021 vocabulary standard)</strong>, not the revised 2026 exam list. Levels 1–6 and band 7–9 use exact word entries, not character levels. “Not listed” does not mean advanced.</p><p><strong>Frequency:</strong> wordfreq’s Chinese usage estimates through about 2021. One extra Zipf point means roughly 10× more frequent. Our labels: 6+ extremely common, 5+ very common, 4+ common, 3+ less common, below 3 rare. No exact record means unknown, not rare.</p><p>Frequency combines pronunciations and meanings. A single character’s score counts it as a separate token, not its appearances inside compound words. <a href="./data/LEVELS-NOTICE.txt" target="_blank" rel="noopener noreferrer">Sources & methodology</a></p></details>
+            </section>
             <div id="reading-choices" hidden><label for="pronunciation-choice">Dictionary readings</label><select id="pronunciation-choice"></select></div>
             <p id="lookup-note" class="fine-print"></p>
             <div class="lookup-actions"><button id="show-meaning" class="primary" type="button" aria-expanded="false" aria-controls="meanings">Show meaning</button><button id="pin-hint" class="secondary" type="button" aria-pressed="false">Pin pinyin</button></div>
@@ -80,7 +86,7 @@
       </div>
       <p class="reading-help">Keyboard: Tab into the text, use ← / → to move between words, Enter to look up, Esc to close. <span id="save-status">Saved on this device.</span></p>
     </section>
-    <footer><p>No login. No text uploads. Reading text and pins stay in this browser, not across devices. <button id="forget-reading" class="text-button" type="button" hidden>Forget saved reading</button></p><details><summary>Dictionary & credits</summary><p>Dictionary data: <a href="https://www.mdbg.net/chinese/dictionary?page=cc-cedict" target="_blank" rel="noopener noreferrer">CC-CEDICT / MDBG and contributors</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Reformatted for local lookup; original definitions preserved. <a href="./data/dictionary.json" download>Download dictionary data</a> · <a href="./data/NOTICE.txt">Attribution & changes</a>.</p></details></footer>
+    <footer><p>No login. No text uploads. Reading text and pins stay in this browser, not across devices. <button id="forget-reading" class="text-button" type="button" hidden>Forget saved reading</button></p><details><summary>Dictionary & credits</summary><p>Dictionary data: <a href="https://www.mdbg.net/chinese/dictionary?page=cc-cedict" target="_blank" rel="noopener noreferrer">CC-CEDICT / MDBG and contributors</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Reformatted for local lookup; original definitions preserved. <a href="./data/dictionary.json" download>Download dictionary data</a> · <a href="./data/NOTICE.txt">Attribution & changes</a>.</p><p>Word levels: <a href="https://github.com/drkameleon/complete-hsk-vocabulary" target="_blank" rel="noopener noreferrer">Complete HSK Vocabulary — Yanis Zafirópulos</a> (MIT). Frequency: <a href="https://github.com/rspeer/wordfreq" target="_blank" rel="noopener noreferrer">wordfreq — Robyn Speer</a> (data CC BY-SA 4.0), including freely available SUBTLEX-CH data by Cai & Brysbaert and other credited sources. <a href="./data/LEVELS-NOTICE.txt">Sources & methodology</a> · <a href="./data/levels.json" download>Download ratings & attribution</a>.</p></details></footer>
   </main>
   <noscript>This reader needs JavaScript for local dictionary lookup. Your text is not sent to a server.</noscript>
 </body>

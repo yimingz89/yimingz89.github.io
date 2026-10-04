@@ -1,0 +1,49 @@
+Chinese Reader — word levels and frequency
+
+HSK: Complete HSK Vocabulary, by Yanis Zafirópulos (Dr.Kameleon), MIT.
+https://github.com/drkameleon/complete-hsk-vocabulary
+Pinned source commit: 7ac65bf1a6387d35f1ade478906172a19311c7f9
+Uses only new-1 ... new-7 tags: HSK 3.0's 2021 vocabulary standard.
+This is NOT the revised 2026 exam list (upstream newest-* tags), nor HSK 2.0.
+7 denotes the combined 7–9 band. Lowest listed level is retained per spelling.
+No level is inferred from component characters. An unlisted word is not
+necessarily difficult or advanced. This is a community-maintained list.
+Original list source credited upstream: https://github.com/elkmovie/hsk30
+
+Frequency: wordfreq 3.1.1, by Robyn Speer; Chinese large wordlist.
+https://github.com/rspeer/wordfreq
+Robyn Speer. (2022). rspeer/wordfreq: v3.0. Zenodo.
+https://doi.org/10.5281/zenodo.7199437
+Frequency data is CC BY-SA 4.0; this transformed data remains CC BY-SA 4.0.
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Changes: restricted to exact dictionary/HSK spellings containing Han characters;
+normalized using wordfreq's Chinese preprocessing and matched against exact
+corpus tokens; converted to Zipf scores, rounded to two decimals; packaged in
+JSON. No estimated multi-token phrase frequencies. No dictionary definitions
+were copied into this ratings dataset. Python wordfreq is a build-time tool,
+not a browser dependency. Its library code is Apache-2.0 licensed.
+
+The usage snapshot is through about 2021, not live frequency or a personalized
+difficulty score. Scores merge readings and senses, and use wordfreq's combined
+Simplified/Traditional normalization. A single-character token's frequency is
+not the frequency of that character inside all compound words. Missing records
+are unknown, never assigned zero or labeled rare. One Zipf point corresponds
+to about ten times the frequency: 3 is roughly once per million tokens.
+
+App-defined labels: 6+ Extremely common; 5–<6 Very common; 4–<5 Common;
+3–<4 Less common; below 3 Rare. These bands are not official HSK categories.
+
+All original wordfreq documentation, attribution, and licensing information,
+and the full HSK MIT notice, are embedded in levels.json's meta section so they
+travel with the downloadable data. The source includes Google Books Ngrams,
+Wikipedia, OPUS/OpenSubtitles, and freely available SUBTLEX-CH by Cai & Brysbaert:
+Cai, Q. & Brysbaert, M. (2010). SUBTLEX-CH: Chinese Word and Character
+Frequencies Based on Film Subtitles. PLoS ONE 5(6): e10729.
+https://doi.org/10.1371/journal.pone.0010729
+See the embedded original documentation for the remaining upstream credits.
+
+Rebuild: install wordfreq==3.1.1 in a developer Python environment; download
+complete.json and README.md from the pinned HSK source commit; run
+python reader/build-levels.py /path/to/complete.json /path/to/HSK-README.md
+The app itself needs no Python, API key, login, Firebase, or paid service.

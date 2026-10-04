@@ -1,10 +1,14 @@
 import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from './dictionary.mjs';
+import { WordLevels, frequencyBand } from './levels.mjs';
 
 const $ = (id) => document.getElementById(id);
 const KEY = 'yiming-chinese-reader-v1';
 const SAMPLE = '周末，城市慢了下来\n\n周六早上，我走进家附近的一家小书店。窗边坐着几位读者，有人看小说，有人读报纸。店里很安静，只有翻书的声音。\n\n最近，市政府出台了一系列促进消费的措施。一些商店延长了营业时间，银行也推出了新的服务。不过，对我来说，周末最好的安排不是购物，而是找一个安静的地方读书。\n\n读到不认识的词时，我会先试着猜它的意思，再查词典。这样虽然慢一点，却能记得更清楚。学习语言不必着急，每天进步一点就很好。';
 const state = { dictionary: null, text: '', title: '', pins: [], showPins: true, fontSize: 26, current: null, pending: null, reading: false };
 let loadPromise;
+let levelsPromise;
+let wordLevels = null;
+let levelsStatus = 'loading';
 let selectionTimer;
 let lastWordFocus = 0;
 
@@ -56,6 +60,7 @@ function choose(start, end, { focus = false } = {}) {
   const text = state.text.slice(start, end);
   if (!text.trim() || text.length > MAX_SELECTION_LENGTH) { message('Select a word or short phrase, up to 120 characters.', true); return; }
   selectionReset();
+  $('level-details').open = false;
   const selected = state.dictionary.selection(text, start);
   const pin = state.pins.find((item) => item.start === start && item.end === end);
   const reading = pin ? Math.max(0, selected.exact.findIndex((entry) => entry.pinyin === pin.pinyin)) : 0;
@@ -83,6 +88,7 @@ function search(text) {
   const index = state.text.indexOf(query);
   if (index >= 0) choose(index, index + query.length);
   else {
+    $('level-details').open = false;
     state.current = { ...state.dictionary.selection(query, -1), meaning: false, reading: 0, characters: false };
     selectionReset(); message(); renderArticle(); renderLookup(); $('lookup-panel').scrollTop = 0;
   }
@@ -161,6 +167,31 @@ function lookupParts() {
   }
   return parts;
 }
+function appendLevelBadges(parent, text, { compact = false } = {}) {
+  if (!wordLevels) return;
+  const { hsk, zipf } = wordLevels.lookup(text);
+  if (hsk !== null || !compact) {
+    const badge = el('span', hsk === null ? 'HSK · Not listed' : `HSK 3.0 · ${hsk === 7 ? '7–9' : hsk}`, `level-badge hsk-badge${hsk === null ? ' is-unlisted' : ''}`);
+    badge.title = hsk === null ? 'No exact entry in the HSK 3.0 (2021) vocabulary list; this does not mean advanced.' : `HSK 3.0 (2021) vocabulary ${hsk === 7 ? 'band 7–9' : `level ${hsk}`}. Exact word, not character level.`;
+    parent.append(badge);
+  }
+  if (zipf !== null || !compact) {
+    const badge = el('span', zipf === null ? 'Frequency · Unknown' : `Freq · ${frequencyBand(zipf)}`, `level-badge frequency-badge${zipf === null ? ' is-unlisted' : ''}`);
+    badge.title = zipf === null ? 'No exact token in the frequency data. No score is inferred from component words.' : `Zipf ${zipf.toFixed(2)} · approximate word frequency; higher means more frequent.`;
+    parent.append(badge);
+  }
+}
+function renderLevelMetadata() {
+  $('level-badges').replaceChildren();
+  $('level-status').textContent = levelsStatus === 'loading' ? 'Loading word levels…' : levelsStatus === 'error' ? 'Word levels unavailable. Dictionary lookup still works.' : '';
+  $('level-status').hidden = levelsStatus === 'ready';
+  $('retry-levels').hidden = levelsStatus !== 'error';
+  $('level-details').hidden = !wordLevels || !state.current;
+  if (!state.current || !wordLevels) return;
+  appendLevelBadges($('level-badges'), state.current.text);
+  const { zipf } = wordLevels.lookup(state.current.text);
+  $('level-exact-note').textContent = `Ratings are for “${state.current.text}” as a whole.${zipf === null ? ' No exact frequency record.' : ` Frequency: Zipf ${zipf.toFixed(2)} (higher = more frequent).`}`;
+}
 function renderLookup() {
   const current = state.current;
   $('lookup-empty').hidden = !!current;
@@ -170,6 +201,7 @@ function renderLookup() {
   document.body.classList.toggle('lookup-open', !!current);
   $('meanings').replaceChildren();
   $('breakdown').replaceChildren();
+  renderLevelMetadata();
   if (current) {
     const exact = current.exact.length > 0 && !current.characters;
     $('lookup-word').textContent = current.text;
@@ -210,6 +242,9 @@ function renderLookup() {
         row.append(button);
         const entries = state.dictionary.lookup(part.text);
         row.append(el('span', entries.length ? [...new Set(entries.map((entry) => entry.pinyin))].join(' / ') : 'No entry', 'part-pinyin'));
+        const badges = el('div', undefined, 'level-badges part-levels');
+        appendLevelBadges(badges, part.text, { compact: true });
+        if (badges.childNodes.length) row.append(badges);
         if (current.meaning && entries.length) definitions(entries, row);
         $('breakdown').append(row);
       }
@@ -353,6 +388,7 @@ function bindEvents() {
   });
   for (const [id, delta] of [['font-smaller', -4], ['font-larger', 4]]) $(id).addEventListener('click', () => { state.fontSize = Math.max(22, Math.min(34, state.fontSize + delta)); renderArticle(); persist(); });
   $('retry-dictionary').addEventListener('click', () => loadDictionary());
+  $('retry-levels').addEventListener('click', () => loadLevels());
 }
 function registerTools() {
   const context = document.modelContext || navigator.modelContext;
@@ -393,5 +429,24 @@ async function loadDictionary() {
   })();
   return loadPromise;
 }
+async function loadLevels() {
+  if (levelsPromise) return levelsPromise;
+  levelsStatus = 'loading'; renderLevelMetadata();
+  levelsPromise = (async () => {
+    try {
+      const response = await fetch('./data/levels.json?v=1');
+      if (!response.ok) throw new Error(`Word levels HTTP ${response.status}`);
+      wordLevels = new WordLevels(await response.json());
+      levelsStatus = 'ready';
+    } catch {
+      wordLevels = null; levelsStatus = 'error';
+    } finally {
+      levelsPromise = null;
+      renderLookup();
+    }
+  })();
+  return levelsPromise;
+}
 bindEvents();
 void loadDictionary();
+void loadLevels();
