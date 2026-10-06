@@ -19,17 +19,15 @@ const state = {
   learning: loadLearning(),
   cloudEditable: true,
   cloudSignedIn: false,
+  saving: false,
 };
 
 const studyListeners = new Set();
+let changeSaver = null;
 
 function notifyStudyChanges(changes) {
   if (!Object.keys(changes).length) return;
   for (const listener of studyListeners) listener(changes);
-}
-
-function currentStarValue(id) {
-  return state.learning.has(id) ? "learning" : state.starred.has(id) ? "keep-fresh" : "none";
 }
 
 const elements = {
@@ -95,10 +93,6 @@ function loadProgress() {
   }
 }
 
-function saveProgress() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.progress));
-}
-
 function loadStarred() {
   try {
     const stored = JSON.parse(localStorage.getItem(STAR_STORAGE_KEY));
@@ -106,10 +100,6 @@ function loadStarred() {
   } catch {
     return new Set();
   }
-}
-
-function saveStarred() {
-  localStorage.setItem(STAR_STORAGE_KEY, JSON.stringify([...state.starred]));
 }
 
 function loadLearning() {
@@ -121,10 +111,6 @@ function loadLearning() {
   } catch {
     return new Set();
   }
-}
-
-function saveLearning() {
-  localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify([...state.learning]));
 }
 
 function escapeHtml(value = "") {
@@ -283,42 +269,27 @@ function updateStarButton(card) {
 }
 
 function toggleStar() {
-  if (!state.cloudEditable) return;
+  if (!state.cloudEditable || state.saving) return;
   const card = state.filteredCards[state.index];
   if (!card) return;
 
   const id = cardId(card);
-  if (state.starred.has(id)) {
-    state.starred.delete(id);
-  } else {
-    state.starred.add(id);
-    state.learning.delete(id);
-  }
-  saveStarred();
-  saveLearning();
-  notifyStudyChanges({ [id]: { star: currentStarValue(id) } });
-  refreshAfterCategoryChange(card);
+  const star = state.starred.has(id) ? "none" : "keep-fresh";
+  return commitStudyChanges({ [id]: { star } }, () => refreshAfterCategoryChange(card));
 }
 
 function toggleLearning() {
-  if (!state.cloudEditable) return;
+  if (!state.cloudEditable || state.saving) return;
   const card = state.filteredCards[state.index];
   if (!card) return;
 
   const id = cardId(card);
-  if (state.learning.has(id)) {
-    state.learning.delete(id);
-  } else {
-    state.learning.add(id);
-    state.starred.delete(id);
-  }
-  saveLearning();
-  saveStarred();
-  notifyStudyChanges({ [id]: { star: currentStarValue(id) } });
-  refreshAfterCategoryChange(card);
+  const star = state.learning.has(id) ? "none" : "learning";
+  return commitStudyChanges({ [id]: { star } }, () => refreshAfterCategoryChange(card));
 }
 
 function refreshAfterCategoryChange(card) {
+  if (!card || card !== state.filteredCards[state.index]) { refreshStudyView(); return; }
   const deck = elements.deckSelect.value;
   const stillBelongs =
     (deck === "starred" && isInStarredDeck(card)) ||
@@ -359,19 +330,15 @@ function moveCard(direction) {
 }
 
 function rateCard(rating) {
-  if (!state.cloudEditable) return;
+  if (!state.cloudEditable || state.saving) return;
   const card = state.filteredCards[state.index];
   if (!card) return;
-  state.progress[cardId(card)] = rating;
-  saveProgress();
-  notifyStudyChanges({ [cardId(card)]: { rating } });
-  updateProgress();
-
-  if (state.index < state.filteredCards.length - 1) {
-    moveCard(1);
-  } else {
-    setRevealed(false);
-  }
+  return commitStudyChanges({ [cardId(card)]: { rating } }, () => {
+    updateProgress();
+    if (state.filteredCards[state.index] !== card) return;
+    if (state.index < state.filteredCards.length - 1) moveCard(1);
+    else setRevealed(false);
+  });
 }
 
 function updateProgress() {
@@ -522,14 +489,11 @@ function shuffleStarredCards() {
 }
 
 function resetProgress() {
-  if (!state.cloudEditable) return;
+  if (!state.cloudEditable || state.saving) return;
   const scope = state.cloudSignedIn ? "your cloud account and signed-in devices" : "this device";
   if (!window.confirm(`Reset all learned and review marks on ${scope}? Stars are kept.`)) return;
   const changes = Object.fromEntries(Object.keys(state.progress).map((id) => [id, { rating: "unrated" }]));
-  state.progress = {};
-  saveProgress();
-  notifyStudyChanges(changes);
-  updateProgress();
+  return commitStudyChanges(changes, updateProgress);
 }
 
 function setBackupStatus(message, isError = false) {
@@ -578,22 +542,23 @@ function validateBackup(backup) {
   return backup;
 }
 
-function mergeBackup(backup) {
-  if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to import locally.");
-  validateBackup(backup);
-  const progress = { ...state.progress, ...backup.progress };
+function applyStudyChanges(changes) {
+  // Merge into the latest view, not a snapshot captured before an async lock.
+  const progress = { ...state.progress };
   const starred = new Set(state.starred);
   const learning = new Set(state.learning);
-  for (const id of backup.keepFresh) {
-    starred.add(id);
-    learning.delete(id);
-  }
-  for (const id of backup.learning) {
-    learning.add(id);
-    starred.delete(id);
+  for (const [id, patch] of Object.entries(changes)) {
+    if (patch.star) {
+      starred.delete(id);
+      learning.delete(id);
+      if (patch.star === "keep-fresh") starred.add(id);
+      if (patch.star === "learning") learning.add(id);
+    }
+    if (patch.rating === "unrated") delete progress[id];
+    else if (patch.rating) progress[id] = patch.rating;
   }
 
-  // Leave the current session untouched if the browser cannot save the import.
+  // Roll back partially written display caches if browser storage fails.
   const updates = [
     [STORAGE_KEY, JSON.stringify(progress)],
     [STAR_STORAGE_KEY, JSON.stringify([...starred])],
@@ -609,16 +574,40 @@ function mergeBackup(backup) {
         else localStorage.setItem(key, value);
       } catch { /* Storage may be disabled entirely. */ }
     }
-    throw new Error("Your browser couldn’t save the import. Check its storage settings and try again.", { cause: error });
+    throw new Error("Your browser couldn’t save the change. Check its storage settings and try again.", { cause: error });
   }
   state.progress = progress;
   state.starred = starred;
   state.learning = learning;
-  const changes = {};
-  for (const id of [...backup.keepFresh, ...backup.learning]) changes[id] = { star: currentStarValue(id) };
-  for (const [id, rating] of Object.entries(backup.progress)) changes[id] = { ...changes[id], rating };
   notifyStudyChanges(changes);
-  applyFilters({ resetIndex: false });
+}
+
+function commitStudyChanges(changes, afterSave) {
+  if (!state.cloudEditable || state.saving) throw new Error("Browser storage is not ready to save. Export your progress, then use Retry in the sync panel.");
+  state.saving = true;
+  setCloudEditable(state.cloudEditable);
+  const finish = () => { state.saving = false; setCloudEditable(state.cloudEditable); };
+  const applyLocal = () => { applyStudyChanges(changes); afterSave(); };
+  try {
+    const result = changeSaver ? changeSaver(changes, applyLocal) : applyLocal();
+    if (result?.then) return result.finally(finish);
+    finish();
+    return result;
+  } catch (error) { finish(); throw error; }
+}
+
+function mergeBackup(backup) {
+  validateBackup(backup);
+  const changes = {};
+  for (const id of backup.keepFresh) changes[id] = { star: "keep-fresh" };
+  for (const id of backup.learning) changes[id] = { star: "learning" };
+  for (const [id, rating] of Object.entries(backup.progress)) changes[id] = { ...changes[id], rating };
+  return commitStudyChanges(changes, () => applyFilters({ resetIndex: false }));
+}
+
+function runStudyAction(action) {
+  try { Promise.resolve(action()).catch((error) => setBackupStatus(error.message, true)); }
+  catch (error) { setBackupStatus(error.message, true); }
 }
 
 async function importProgress() {
@@ -640,7 +629,7 @@ async function importProgress() {
       setBackupStatus("Import canceled. Your saved cards are unchanged.");
       return;
     }
-    mergeBackup(backup);
+    await mergeBackup(backup);
     setBackupStatus(state.cloudSignedIn
       ? "Imported successfully. Changes are queued for cloud sync; check the sync status above."
       : "Imported successfully. Your stars and progress are saved in this browser.");
@@ -648,19 +637,19 @@ async function importProgress() {
     setBackupStatus(error.message, true);
   } finally {
     elements.importFile.value = "";
-    elements.importButton.disabled = !state.cloudEditable;
+    elements.importButton.disabled = !state.cloudEditable || state.saving;
   }
 }
 
 function bindEvents() {
   elements.revealButton.addEventListener("click", () => setRevealed(true));
   elements.hideButton.addEventListener("click", () => setRevealed(false));
-  elements.againButton.addEventListener("click", () => rateCard("review"));
-  elements.gotItButton.addEventListener("click", () => rateCard("learned"));
+  elements.againButton.addEventListener("click", () => runStudyAction(() => rateCard("review")));
+  elements.gotItButton.addEventListener("click", () => runStudyAction(() => rateCard("learned")));
   elements.previousButton.addEventListener("click", () => moveCard(-1));
   elements.nextButton.addEventListener("click", () => moveCard(1));
-  elements.starButton.addEventListener("click", toggleStar);
-  elements.learningStarButton.addEventListener("click", toggleLearning);
+  elements.starButton.addEventListener("click", () => runStudyAction(toggleStar));
+  elements.learningStarButton.addEventListener("click", () => runStudyAction(toggleLearning));
   elements.keepFreshFilter.addEventListener("click", () => toggleStarFilter("keep-fresh"));
   elements.learningFilter.addEventListener("click", () => toggleStarFilter("learning"));
   elements.backToFullDeck.addEventListener("click", backToFullDeck);
@@ -675,7 +664,7 @@ function bindEvents() {
   });
   elements.shuffleButton.addEventListener("click", toggleShuffle);
   elements.shuffleStarredButton.addEventListener("click", shuffleStarredCards);
-  elements.resetButton.addEventListener("click", resetProgress);
+  elements.resetButton.addEventListener("click", () => runStudyAction(resetProgress));
   elements.exportButton.addEventListener("click", exportProgress);
   elements.importButton.addEventListener("click", () => elements.importFile.click());
   elements.importFile.addEventListener("change", importProgress);
@@ -694,9 +683,9 @@ function bindEvents() {
       event.preventDefault();
       setRevealed(!state.revealed);
     } else if (event.key === "1" && state.revealed) {
-      rateCard("review");
+      runStudyAction(() => rateCard("review"));
     } else if (event.key === "2" && state.revealed) {
-      rateCard("learned");
+      runStudyAction(() => rateCard("learned"));
     } else if (event.key === "ArrowLeft") {
       moveCard(-1);
     } else if (event.key === "ArrowRight") {
@@ -752,11 +741,11 @@ function registerWebMcpTools() {
       description: "Add or remove the Keep fresh star. Adding it clears any Learning star.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute() {
+      async execute() {
         const card = state.filteredCards[state.index];
         if (!card) throw new Error("No card is available in the current deck.");
-        if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to edit locally.");
-        toggleStar();
+        if (!state.cloudEditable || state.saving) throw new Error("Browser storage is not ready to save. Check the sync panel.");
+        await toggleStar();
         return { character: card.character, keepFresh: isStarred(card), learning: isLearning(card), saved: true };
       },
     },
@@ -766,11 +755,11 @@ function registerWebMcpTools() {
       description: "Add or remove the Learning star. Adding it clears any Keep fresh star. Full decks include all cards.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute() {
+      async execute() {
         const card = state.filteredCards[state.index];
         if (!card) throw new Error("No card is available in the current deck.");
-        if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to edit locally.");
-        toggleLearning();
+        if (!state.cloudEditable || state.saving) throw new Error("Browser storage is not ready to save. Check the sync panel.");
+        await toggleLearning();
         return { character: card.character, learning: isLearning(card), keepFresh: isStarred(card), saved: true };
       },
     },
@@ -798,14 +787,14 @@ function registerWebMcpTools() {
         additionalProperties: false,
       },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute(input) {
+      async execute(input) {
         if (!input || !["review", "learned"].includes(input.rating)) {
           throw new Error('rating must be either "review" or "learned".');
         }
         const card = state.filteredCards[state.index];
         if (!card) throw new Error("No card is available in the current deck.");
-        if (!state.cloudEditable) throw new Error("Wait for cloud sync to connect, or sign out to edit locally.");
-        rateCard(input.rating);
+        if (!state.cloudEditable || state.saving) throw new Error("Browser storage is not ready to save. Check the sync panel.");
+        await rateCard(input.rating);
         return { character: card.character, rating: input.rating, saved: true };
       },
     },
@@ -848,15 +837,12 @@ async function init() {
 function setCloudEditable(editable) {
   state.cloudEditable = editable;
   for (const element of [elements.starButton, elements.learningStarButton, elements.againButton, elements.gotItButton, elements.resetButton, elements.importButton]) {
-    element.disabled = !editable;
+    element.disabled = !editable || state.saving;
   }
 }
 
 function applyCloudBackup(backup) {
   validateBackup(backup);
-  const current = state.filteredCards[state.index];
-  const revealed = state.revealed;
-  const order = new Map(state.filteredCards.map((card, index) => [cardId(card), index]));
   // Keep legacy local keys as a cache, so local use and exports continue working.
   localStorage.setItem(STORAGE_KEY, JSON.stringify(backup.progress));
   localStorage.setItem(STAR_STORAGE_KEY, JSON.stringify(backup.keepFresh));
@@ -864,6 +850,13 @@ function applyCloudBackup(backup) {
   state.progress = { ...backup.progress };
   state.starred = new Set(backup.keepFresh);
   state.learning = new Set(backup.learning);
+  refreshStudyView();
+}
+
+function refreshStudyView() {
+  const current = state.filteredCards[state.index];
+  const revealed = state.revealed;
+  const order = new Map(state.filteredCards.map((card, index) => [cardId(card), index]));
   applyFilters({ resetIndex: false });
   if (isSpecialDeck() ? state.starredShuffled : state.shuffled) {
     state.filteredCards.sort((a, b) => (order.get(cardId(a)) ?? Infinity) - (order.get(cardId(b)) ?? Infinity));
@@ -885,6 +878,7 @@ window.hanziStudy = {
   applyCloudBackup,
   mergeBackup,
   setCloudEditable,
+  setChangeSaver: (saver) => { changeSaver = saver; },
   setCloudSignedIn: (signedIn) => { state.cloudSignedIn = signedIn; },
   subscribe: (listener) => { studyListeners.add(listener); return () => studyListeners.delete(listener); },
 };

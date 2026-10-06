@@ -23,6 +23,11 @@ let stopped = false;
 let authKnown = false;
 let signInAttempt = null;
 let operationChain = Promise.resolve();
+let queueSafe = false;
+let connectionTimer = null;
+let connectionSlow = false;
+let syncError = null;
+const CONNECTION_TIMEOUT_MS = 15000;
 
 function show(message, isError = false) {
   status.textContent = message;
@@ -66,28 +71,52 @@ function showSignInError(error) {
   console.warn('Hanzi Google sign-in:', errorCode(error));
 }
 
-function report(error) {
-  stopped = true;
-  show(friendlyError(error), true);
-  retry.classList.remove('hidden');
-  // Don’t allow unqueued changes to be overwritten by a later server snapshot.
-  api?.setCloudEditable(!user);
-  console.warn('Hanzi cloud sync:', error.code || error.message);
+function clearConnectionTimer() {
+  if (connectionTimer !== null) window.clearTimeout(connectionTimer);
+  connectionTimer = null;
 }
 
-function serial(operation) {
+function report(error, current = session, storageFailure = false) {
+  if (current !== session) return;
+  clearConnectionTimer();
+  stopped = true;
+  syncError = error;
+  if (storageFailure) queueSafe = false;
+  retry.classList.remove('hidden');
+  recover.disabled = true;
+  api?.setCloudEditable(!user || queueSafe);
+  if (user) paintStatus();
+  else show(friendlyError(error), true);
+  console.warn('Hanzi cloud sync:', errorCode(error));
+}
+
+function serial(operation, uid = user?.uid || 'signed-out') {
   const run = () => navigator.locks
-    ? navigator.locks.request(`hanzi-state:${user?.uid || 'signed-out'}`, operation)
+    ? navigator.locks.request(`hanzi-state:${uid}`, operation)
     : operation();
-  operationChain = operationChain.then(run).catch(report);
-  return operationChain;
+  const result = operationChain.then(run);
+  // A rejected operation must not prevent later recovery or another user's queue.
+  operationChain = result.catch(() => {});
+  return result;
 }
 
 function paintStatus() {
-  if (stopped || !user) return;
-  const count = engine?.pendingCount || 0;
-  if (!navigator.onLine) show(`Offline · ${count} card${count === 1 ? '' : 's'} waiting to sync on this device`);
-  else if (!ready) show('Connecting to your saved cloud data…');
+  if (!user) return;
+  if (!queueSafe) {
+    show('Browser storage could not safely save your changes. Editing is paused. Export your progress before troubleshooting, then Retry. Do not clear site data.', true);
+    return;
+  }
+  let count;
+  try { count = engine.pendingCount; }
+  catch (error) { report(error, session, true); return; }
+  const local = count
+    ? `${count} card${count === 1 ? '' : 's'} saved on this device, waiting to sync.`
+    : 'You can keep editing and importing on this device.';
+  retry.classList.toggle('hidden', !(stopped || connectionSlow || !navigator.onLine));
+  if (stopped) show(`${friendlyError(syncError)} ${local}`, true);
+  else if (!navigator.onLine) show(`Offline · ${local}`);
+  else if (!ready && connectionSlow) show(`Cloud connection is taking longer than expected. ${local} Retry to reconnect.`, true);
+  else if (!ready) show(`Connecting to your saved cloud data… ${local}`);
   else if (count || flushing) show(`Saving to cloud…${count ? ` (${count} cards)` : ''}`);
   else show('Synced to cloud · available on your other signed-in devices');
 }
@@ -102,7 +131,8 @@ async function flush() {
   const send = async () => {
     while (current === session && !stopped && navigator.onLine) {
       let items;
-      await serial(() => { if (current === session) items = queue.nextBatch(); });
+      await serial(() => { if (current === session) items = queue.nextBatch(); }, uid)
+        .catch((error) => { report(error, current, true); });
       if (!items?.length) break;
       const batch = db.writeBatch();
       for (const item of items) batch.set(db.card(uid, item.id), { ...item.patch, updatedAt: db.serverTimestamp() }, { merge: true });
@@ -111,7 +141,7 @@ async function flush() {
         // Preserve the old user's queue when sign-out interrupts a request.
         if (current !== session) return;
         queue.acknowledge(items);
-      });
+      }, uid).catch((error) => { report(error, current, true); });
     }
   };
   try {
@@ -119,7 +149,7 @@ async function flush() {
     if (navigator.locks) await navigator.locks.request(`hanzi-send:${uid}`, send);
     else await send();
   } catch (error) {
-    if (current === session) report(error);
+    report(error, current);
   } finally {
     if (current === session) {
       flushing = false;
@@ -134,15 +164,20 @@ function backupKey(uid) { return `hanzi-before-cloud-v1:${uid}`; }
 
 async function connect(nextUser) {
   const current = ++session;
+  clearConnectionTimer();
   unsubscribe?.();
   unsubscribe = null;
   user = nextUser;
   ready = false;
   flushing = false;
   stopped = false;
+  queueSafe = false;
+  connectionSlow = false;
+  syncError = null;
   engine = null;
   retry.classList.add('hidden');
   recover.classList.add('hidden');
+  recover.disabled = true;
   login.classList.toggle('hidden', !!user);
   logout.classList.toggle('hidden', !user);
   api.setCloudEditable(!user);
@@ -158,10 +193,25 @@ async function connect(nextUser) {
     const uid = user.uid;
     const original = api.getBackup();
     if (!localStorage.getItem(backupKey(uid))) localStorage.setItem(backupKey(uid), JSON.stringify(original));
-    recover.classList.remove('hidden');
-    engine = new SyncState({ storage: localStorage, uid, validIds: api.getCardIds() });
-    engine.readPending();
+    const queue = new SyncState({ storage: localStorage, uid, validIds: api.getCardIds() });
+    engine = queue;
+    // Validate and test persistence before allowing edits. Local commits and
+    // snapshots share this lock, so a snapshot cannot overwrite an unqueued edit.
+    await serial(() => {
+      queue.enqueue({});
+      if (current !== session) return;
+      api.applyCloudBackup(recordsToBackup(queue.acceptRemote(backupToRecords(original))));
+    }, uid);
+    if (current !== session) return;
+    queueSafe = true;
+    api.setCloudEditable(true);
     paintStatus();
+    connectionTimer = window.setTimeout(() => {
+      if (current !== session || ready || stopped) return;
+      connectionTimer = null;
+      connectionSlow = true;
+      paintStatus();
+    }, CONNECTION_TIMEOUT_MS);
     let first = true;
     unsubscribe = db.listen(uid, (snapshot) => {
       if (current !== session || stopped || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
@@ -173,26 +223,60 @@ async function connect(nextUser) {
           const linkedKey = `hanzi-cloud-linked-v1:${uid}`;
           // Seed only a genuinely empty cloud on this browser's first successful link.
           // Never union old local lists into an existing cloud: that revives removed stars.
-          if (snapshot.empty && !localStorage.getItem(linkedKey) && !engine.pendingCount) {
+          if (snapshot.empty && !localStorage.getItem(linkedKey)) {
             const seed = backupToRecords(original);
-            if (Object.keys(seed).length) engine.enqueue(seed);
+            const pending = queue.readPending();
+            // Preserve the initial migration, but never replace newer local
+            // edits (including explicit star/rating removals) with the seed.
+            for (const [id, fields] of Object.entries(seed)) {
+              for (const field of Object.keys(fields)) if (pending[id]?.[field]) delete fields[field];
+              if (!Object.keys(fields).length) delete seed[id];
+            }
+            if (Object.keys(seed).length) queue.enqueue(seed);
           }
           localStorage.setItem(linkedKey, 'true');
           first = false;
         }
-        api.applyCloudBackup(recordsToBackup(engine.acceptRemote(records)));
+        api.applyCloudBackup(recordsToBackup(queue.acceptRemote(records)));
         ready = true;
+        connectionSlow = false;
+        clearConnectionTimer();
         api.setCloudEditable(true);
+        recover.classList.remove('hidden');
+        recover.disabled = false;
         paintStatus();
-      }).then(flush);
-    }, (error) => { if (current === session) report(error); });
-  } catch (error) { if (current === session) report(error); }
+      }, uid).then(flush).catch((error) => report(error, current, true));
+    }, (error) => report(error, current));
+  } catch (error) { report(error, current, true); }
+}
+
+function saveChanges(changes, applyLocal) {
+  if (!user) return applyLocal();
+  const current = session;
+  const uid = user.uid;
+  const queue = engine;
+  if (!queueSafe || !queue) throw new Error('Browser storage is not ready. Export your progress and Retry.');
+  return serial(() => {
+    // Keep accepted edits for their original account even if Retry/sign-out
+    // runs while this operation is waiting for another tab's storage lock.
+    queue.enqueue(changes);
+    if (current === session) {
+      applyLocal();
+      paintStatus();
+    }
+  }, uid).then(() => {
+    if (current === session) void flush();
+  }).catch((error) => {
+    report(error, current, true);
+    throw new Error('Your browser couldn’t safely save the change. Export your progress and check browser storage before retrying.', { cause: error });
+  });
 }
 
 async function start() {
   api = window.hanziStudy;
   if (!api) throw new Error('Study app did not initialize');
   if (!await api.ready) throw new Error('Study deck could not load');
+  api.setChangeSaver(saveChanges);
   const [appSdk, authSdk, firestore] = await Promise.all([
     import(`${sdkBase}firebase-app.js`),
     import(`${sdkBase}firebase-auth.js`),
@@ -249,24 +333,25 @@ async function start() {
     try { await authSdk.signOut(auth); } catch (error) { report(error); }
   });
   retry.addEventListener('click', () => { void connect(auth.currentUser); });
-  recover.addEventListener('click', () => {
+  recover.addEventListener('click', async () => {
     if (!user || !ready || stopped) return;
-    const backup = JSON.parse(localStorage.getItem(backupKey(user.uid)) || 'null');
-    if (!backup) return;
-    const count = backup.keepFresh.length + backup.learning.length;
-    if (!window.confirm(`Merge the ${count} stars and ${Object.keys(backup.progress).length} progress marks saved before cloud setup? Those marks will win for matching cards and sync to your other devices.`)) return;
-    api.mergeBackup(backup);
-  });
-  api.subscribe((changes) => {
-    if (!user || !engine) return;
     const current = session;
-    void serial(() => {
-      if (current !== session) return;
-      engine.enqueue(changes);
-      paintStatus();
-    }).then(flush);
+    try {
+      const backup = JSON.parse(localStorage.getItem(backupKey(user.uid)) || 'null');
+      if (!backup) return;
+      const count = backup.keepFresh.length + backup.learning.length;
+      if (!window.confirm(`Merge the ${count} stars and ${Object.keys(backup.progress).length} progress marks saved before cloud setup? Those marks will win for matching cards and sync to your other devices.`)) return;
+      await api.mergeBackup(backup);
+    } catch {
+      // The saver already reports real storage failures. A busy/invalid backup
+      // must not disable a healthy queue or affect a different signed-in user.
+      if (current === session && queueSafe) show('Backup merge did not finish. Wait for any local save to complete and try again, or import a valid exported backup.', true);
+    }
   });
-  window.addEventListener('online', () => { paintStatus(); void flush(); });
+  window.addEventListener('online', () => {
+    if (user && queueSafe && (stopped || !ready)) void connect(auth.currentUser);
+    else { paintStatus(); void flush(); }
+  });
   window.addEventListener('offline', paintStatus);
   window.addEventListener('storage', (event) => {
     if (!engine || event.key !== engine.key || !ready || stopped) return;

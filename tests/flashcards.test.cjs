@@ -94,7 +94,7 @@ test('relative-path deployment loads all cards and keeps card jumps/reveal worki
   assert.equal(app.run('state.revealed'), true);
   assert.equal(app.nodes.get('export-progress').disabled, false);
   assert.match(html, /href="\.\/styles.css\?v=12"/);
-  assert.match(html, /src="\.\/app.js\?v=11"/);
+  assert.match(html, /src="\.\/app.js\?v=13"/);
   assert.throws(() => app.run('jumpToRank(-1)'), /whole card number/);
 });
 
@@ -232,11 +232,83 @@ test('cloud connection guard blocks mutations; reset syncs rating removals witho
   const before = Array.from(app.storage);
   app.run('toggleStar(); toggleLearning(); rateCard("review"); resetProgress()');
   assert.deepEqual(Array.from(app.storage), before);
-  assert.throws(() => app.context.window.hanziStudy.mergeBackup(backup()), /Wait for cloud sync/);
+  assert.throws(() => app.context.window.hanziStudy.mergeBackup(backup()), /Browser storage is not ready/);
   assert.equal(app.nodes.get('import-progress').disabled, true);
   assert.deepEqual(changes, []);
   app.context.window.hanziStudy.setCloudEditable(true);
   app.run('resetProgress()');
   assert.deepEqual(changes, [{ '1:的': { rating: 'unrated' } }]);
   assert.equal(app.run('state.starred.has("1:的")'), true);
+});
+
+test('import waits for its durable queue write and merges into the latest cloud view', async () => {
+  const app = await loadApp({ [starKey]: '["1:的"]' });
+  let finish;
+  let queued;
+  app.context.window.hanziStudy.setCloudSignedIn(true);
+  app.context.window.hanziStudy.setChangeSaver((changes, applyLocal) => new Promise((resolve) => {
+    queued = changes;
+    finish = () => { applyLocal(); resolve(); };
+  }));
+  const importing = app.importFile(JSON.stringify(backup({ learning: ['1:的'] })));
+  await new Promise(setImmediate);
+  assert.equal(app.nodes.get('import-progress').disabled, true);
+  assert.doesNotMatch(app.nodes.get('backup-status').textContent, /Imported successfully/);
+  assert.equal(app.run('state.starred.has("1:的")'), true);
+  assert.equal(queued['1:的'].star, 'learning');
+  app.context.window.hanziStudy.applyCloudBackup(backup({ keepFresh: ['100:实'], progress: { '2:一': 'learned' } }));
+  app.context.window.hanziStudy.setCloudEditable(true);
+  assert.equal(app.nodes.get('import-progress').disabled, true, 'snapshot cannot enable an in-flight import');
+  finish();
+  await importing;
+  assert.equal(app.run('state.learning.has("1:的")'), true);
+  assert.equal(app.run('state.starred.has("100:实")'), true);
+  assert.equal(app.run('state.progress["2:一"]'), 'learned');
+  assert.match(app.nodes.get('backup-status').textContent, /Imported successfully.*queued/);
+  assert.equal(app.nodes.get('import-progress').disabled, false);
+});
+
+test('a failed durable queue write cannot claim import success or mutate local marks', async () => {
+  const app = await loadApp({ [starKey]: '["1:的"]' });
+  app.context.window.hanziStudy.setCloudSignedIn(true);
+  app.context.window.hanziStudy.setChangeSaver(async () => { throw new Error('Queue storage unavailable'); });
+  await app.importFile(JSON.stringify(backup({ learning: ['1:的'] })));
+  assert.equal(app.run('state.starred.has("1:的")'), true);
+  assert.equal(app.run('state.learning.size'), 0);
+  assert.match(app.nodes.get('backup-status').textContent, /Queue storage unavailable/);
+  assert.doesNotMatch(app.nodes.get('backup-status').textContent, /Imported successfully/);
+  assert.equal(app.run('state.saving'), false);
+});
+
+test('a delayed star action applies its intended category and preserves unrelated remote marks', async () => {
+  const app = await loadApp();
+  let finish;
+  app.context.window.hanziStudy.setChangeSaver((changes, applyLocal) => new Promise((resolve) => {
+    assert.equal(changes['1:的'].star, 'keep-fresh');
+    finish = () => { applyLocal(); resolve(); };
+  }));
+  const saving = app.run('toggleStar()');
+  assert.equal(app.nodes.get('star-button').disabled, true);
+  app.context.window.hanziStudy.applyCloudBackup(backup({ keepFresh: ['1:的'], learning: ['100:实'] }));
+  finish();
+  await saving;
+  assert.equal(app.run('state.starred.has("1:的")'), true, 'must set the intended value, not toggle the newer snapshot');
+  assert.equal(app.run('state.learning.has("100:实")'), true);
+  assert.equal(app.nodes.get('star-button').disabled, false);
+});
+
+test('navigating during a queued unstar keeps the current card and removes the edited card from its filter', async () => {
+  const app = await loadApp({ [starKey]: '["1:的","2:一"]' });
+  app.run('toggleStarFilter("keep-fresh")');
+  let finish;
+  app.context.window.hanziStudy.setChangeSaver((changes, applyLocal) => new Promise((resolve) => {
+    finish = () => { applyLocal(); resolve(); };
+  }));
+  const saving = app.run('toggleStar()');
+  app.run('moveCard(1); setRevealed(true)');
+  finish();
+  await saving;
+  assert.equal(app.run('state.filteredCards.length'), 1);
+  assert.equal(app.run('state.filteredCards[state.index].rank'), 2);
+  assert.equal(app.run('state.revealed'), true);
 });
