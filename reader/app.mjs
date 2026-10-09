@@ -1,10 +1,13 @@
-import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from './dictionary.mjs';
+import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from './dictionary.mjs?v=3';
 import { WordLevels, frequencyBand } from './levels.mjs';
+import { LocalTranslator, MAX_TRANSLATION_LENGTH } from './translation.mjs?v=1';
 
 const $ = (id) => document.getElementById(id);
 const KEY = 'yiming-chinese-reader-v1';
 const SAMPLE = '周末，城市慢了下来\n\n周六早上，我走进家附近的一家小书店。窗边坐着几位读者，有人看小说，有人读报纸。店里很安静，只有翻书的声音。\n\n最近，市政府出台了一系列促进消费的措施。一些商店延长了营业时间，银行也推出了新的服务。不过，对我来说，周末最好的安排不是购物，而是找一个安静的地方读书。\n\n读到不认识的词时，我会先试着猜它的意思，再查词典。这样虽然慢一点，却能记得更清楚。学习语言不必着急，每天进步一点就很好。';
-const state = { dictionary: null, text: '', title: '', pins: [], showPins: true, fontSize: 26, current: null, pending: null, reading: false };
+const state = { dictionary: null, text: '', title: '', pins: [], showPins: true, fontSize: 26, current: null, pending: null, reading: false, translations: [] };
+const localTranslator = new LocalTranslator();
+let translationRequest = null;
 let loadPromise;
 let levelsPromise;
 let wordLevels = null;
@@ -27,7 +30,7 @@ function currentPin() { return state.current && state.pins.find((pin) => pin.sta
 
 function persist() {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ text: state.text, title: state.title, pins: state.pins, showPins: state.showPins, fontSize: state.fontSize }));
+    localStorage.setItem(KEY, JSON.stringify({ text: state.text, title: state.title, pins: state.pins, showPins: state.showPins, fontSize: state.fontSize, translations: state.translations }));
     $('save-status').textContent = 'Saved on this device.';
   } catch {
     $('save-status').textContent = 'Browser storage is unavailable. Keep a copy of your text before closing.';
@@ -55,6 +58,64 @@ function selectionReset() {
   state.pending = null;
   $('lookup-selection').disabled = true;
   $('lookup-selection').textContent = 'Look up selection';
+  updateTranslationControls();
+}
+
+function translationStatus(text, error = false) {
+  $('translation-status').textContent = text;
+  $('translation-status').dataset.error = String(error);
+}
+function updateTranslationControls() {
+  const count = state.pending ? [...state.text.slice(state.pending.start, state.pending.end)].length : 0;
+  const cached = state.pending && state.translations.some((item) => item.start === state.pending.start && item.end === state.pending.end);
+  $('translate-selection').disabled = !!translationRequest || !count || count > MAX_TRANSLATION_LENGTH || (!cached && !localTranslator.supported());
+  $('translate-selection').textContent = translationRequest ? 'Translating…' : count > MAX_TRANSLATION_LENGTH ? 'Select up to 1,500 characters' : cached ? 'Show translation' : `Translate selection${count ? ` (${count})` : ''}`;
+  $('cancel-translation').hidden = !translationRequest;
+}
+function cancelTranslation({ quiet = false } = {}) {
+  if (!translationRequest) return;
+  const request = translationRequest;
+  translationRequest = null;
+  request.controller.abort();
+  updateTranslationControls();
+  if (!quiet) translationStatus('Translation canceled. Your reading and saved translations are unchanged.');
+}
+async function translateSelection() {
+  if (translationRequest || !state.reading || !state.pending) return;
+  const { start, end } = state.pending;
+  const source = state.text.slice(start, end);
+  if (!source.trim() || [...source].length > MAX_TRANSLATION_LENGTH) { translationStatus('Select up to 1,500 characters to translate.', true); return; }
+  const cached = state.translations.find((item) => item.start === start && item.end === end);
+  if (cached) {
+    cached.visible = true;
+    selectionReset(); persist(); renderArticle();
+    translationStatus('Showing the saved translation. No new translation was needed.');
+    return;
+  }
+  if (!localTranslator.supported()) { translationStatus('On-device translation needs a supported desktop Chrome browser. Dictionary and pinyin still work; no text is uploaded.', true); return; }
+  if (state.translations.filter((item) => !overlapping(item, { start, end })).length >= 100) { translationStatus('This reading has 100 saved translations. Remove one with × before adding another.', true); return; }
+  const request = { controller: new AbortController(), text: state.text, start, end };
+  translationRequest = request;
+  updateTranslationControls();
+  translationStatus('Preparing on-device translation… First use may download a language pack.');
+  try {
+    // Start in the click handler: Chrome requires user activation to download its model.
+    const english = await localTranslator.translate(source, {
+      signal: request.controller.signal,
+      onProgress: (text) => { if (translationRequest === request) translationStatus(text); },
+    });
+    if (translationRequest !== request || state.text !== request.text || !state.reading) return;
+    if (typeof english !== 'string' || !english.trim() || english.length > 20000) throw new Error('No usable translation was returned. Select a shorter passage and try again.');
+    // Only replace overlaps after a successful result; failed requests keep existing hints.
+    state.translations = state.translations.filter((item) => !overlapping(item, request));
+    state.translations.push({ start, end, source, english: english.trim(), visible: true });
+    selectionReset(); persist(); renderArticle();
+    translationStatus('Translation shown above your selection. Use Hide translation to test your reading. Machine translations can be imperfect.');
+  } catch (error) {
+    if (translationRequest === request) translationStatus(error.name === 'AbortError' ? 'Translation canceled.' : error.message || 'On-device translation failed. Please try again.', error.name !== 'AbortError');
+  } finally {
+    if (translationRequest === request) { translationRequest = null; updateTranslationControls(); }
+  }
 }
 function choose(start, end, { focus = false } = {}) {
   const text = state.text.slice(start, end);
@@ -106,33 +167,45 @@ function renderArticle() {
   const tokens = tokensWithOverrides(state.text, state.dictionary, overrides);
   const fragment = document.createDocumentFragment();
   let firstWord = true;
-  for (const token of tokens) {
+  function appendTokens(parent, start, end) {
+  for (const original of tokens) {
+    if (original.end <= start || original.start >= end) continue;
+    const token = { ...original, start: Math.max(start, original.start), end: Math.min(end, original.end) };
+    token.text = state.text.slice(token.start, token.end);
     const source = el('span', token.text, 'source-text');
     source.dataset.start = String(token.start);
     if (!token.interactive) {
       // Keep closing punctuation with the preceding word at narrow widths.
-      const previous = fragment.lastElementChild;
+      const previous = parent.lastElementChild;
       if (/^[，。！？；：、）】」』》〉〕〗〙〛”’…]+$/u.test(token.text) && previous?.matches('.word, .word-tail')) {
         let group = previous;
         if (previous.matches('.word')) {
           group = el('span', undefined, 'word-tail'); previous.replaceWith(group); group.append(previous);
         }
         group.append(source);
-      } else fragment.append(source);
+      } else parent.append(source);
       continue;
     }
     const word = el('span', undefined, 'word');
-    word.dataset.start = String(token.start);
-    word.dataset.end = String(token.end);
+    word.dataset.start = String(original.start);
+    word.dataset.end = String(original.end);
     word.setAttribute('role', 'button');
     word.tabIndex = firstWord ? 0 : -1;
     firstWord = false;
     const selected = inArticle(state.current) && token.start < state.current.end && token.end > state.current.start;
-    const pin = state.pins.find((item) => item.start === token.start && item.end === token.end);
+    const pin = state.pins.find((item) => item.start === original.start && item.end === original.end);
     word.classList.toggle('is-active', !!selected);
     word.classList.toggle('is-pinned', !!pin && state.showPins);
-    const reading = active && token.start === active.start && token.end === active.end
+    let reading = active && original.start === active.start && original.end === active.end
       ? activeEntry()?.pinyin : state.showPins && pin ? pin.pinyin : '';
+    // A translation can begin inside a dictionary word. Keep word lookup intact,
+    // while displaying only the matching pinyin syllables on each split piece.
+    if (reading && (token.start !== original.start || token.end !== original.end)) {
+      const syllables = reading.split(/\s+/u);
+      reading = syllables.length === [...original.text].length
+        ? syllables.slice([...state.text.slice(original.start, token.start)].length, [...state.text.slice(original.start, token.end)].length).join(' ')
+        : token.start === original.start ? reading : '';
+    }
     word.append(source);
     if (reading) {
       const hint = el('span', reading, 'pronunciation');
@@ -141,8 +214,40 @@ function renderArticle() {
     }
     word.setAttribute('aria-label', reading ? `${token.text} · ${reading}` : token.text);
     word.setAttribute('aria-pressed', String(!!selected));
-    fragment.append(word);
+    parent.append(word);
   }
+  }
+  let cursor = 0;
+  for (const item of state.translations.slice().sort((a, b) => a.start - b.start)) {
+    appendTokens(fragment, cursor, item.start);
+    const group = el('span', undefined, 'translation-span');
+    group.dataset.start = String(item.start); group.dataset.end = String(item.end);
+    const annotation = el('span', undefined, 'translation-annotation');
+    annotation.lang = 'en';
+    const english = el('span', item.english, 'translation-text');
+    english.id = `translation-${item.start}-${item.end}`;
+    english.hidden = !item.visible;
+    const controls = el('span', undefined, 'translation-actions');
+    const toggle = el('button', item.visible ? 'Hide translation' : 'Show translation', 'translation-toggle');
+    toggle.type = 'button'; toggle.setAttribute('aria-expanded', String(item.visible)); toggle.setAttribute('aria-controls', english.id);
+    toggle.addEventListener('click', () => {
+      item.visible = !item.visible; english.hidden = !item.visible;
+      toggle.textContent = item.visible ? 'Hide translation' : 'Show translation';
+      toggle.setAttribute('aria-expanded', String(item.visible)); persist();
+    });
+    const remove = el('button', '×', 'translation-remove');
+    remove.type = 'button'; remove.setAttribute('aria-label', `Remove translation for ${item.source}`);
+    remove.addEventListener('click', () => {
+      state.translations = state.translations.filter((entry) => entry !== item);
+      selectionReset(); persist(); renderArticle(); $('translate-selection').focus();
+    });
+    controls.append(toggle, remove); annotation.append(english, controls);
+    const original = el('span', undefined, 'translation-source');
+    appendTokens(original, item.start, item.end);
+    group.append(annotation, original); fragment.append(group);
+    cursor = item.end;
+  }
+  appendTokens(fragment, cursor, state.text.length);
   $('article').replaceChildren(fragment);
   $('article').dataset.size = String(state.fontSize);
   $('font-label').textContent = `${state.fontSize} px`;
@@ -298,19 +403,27 @@ function sourceOffset(container, offset) {
 function updateSelection() {
   if (!state.reading) return;
   const selection = window.getSelection();
-  if (!selection?.rangeCount || selection.isCollapsed) return;
+  if (!selection?.rangeCount || selection.isCollapsed) {
+    // Keep the captured range while keyboard focus moves to a selection action.
+    if (!['lookup-selection', 'translate-selection'].includes(document.activeElement?.id)) selectionReset();
+    return;
+  }
   const range = selection.getRangeAt(0);
-  if (!$('article').contains(range.startContainer) || !$('article').contains(range.endContainer)) return;
-  const isHint = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('.pronunciation');
-  if (isHint(range.startContainer) || isHint(range.endContainer)) return;
+  if (!$('article').contains(range.startContainer) || !$('article').contains(range.endContainer)) { selectionReset(); return; }
+  const isHint = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('.pronunciation, .translation-annotation');
+  if (isHint(range.startContainer) || isHint(range.endContainer)) { selectionReset(); return; }
   let start = sourceOffset(range.startContainer, range.startOffset);
   let end = sourceOffset(range.endContainer, range.endOffset);
   while (start < end && /\s/u.test(state.text[start])) start++;
   while (end > start && /\s/u.test(state.text[end - 1])) end--;
-  if (start === end) return;
+  // Never send a partial surrogate pair if a DOM range bisects a Unicode character.
+  if (start > 0 && /[\uDC00-\uDFFF]/u.test(state.text[start]) && /[\uD800-\uDBFF]/u.test(state.text[start - 1])) start--;
+  if (end < state.text.length && /[\uDC00-\uDFFF]/u.test(state.text[end]) && /[\uD800-\uDBFF]/u.test(state.text[end - 1])) end++;
+  if (start === end) { selectionReset(); return; }
   state.pending = { start, end };
   $('lookup-selection').disabled = end - start > MAX_SELECTION_LENGTH;
   $('lookup-selection').textContent = end - start > MAX_SELECTION_LENGTH ? 'Select up to 120 characters' : `Look up selection (${[...state.text.slice(start, end)].length})`;
+  updateTranslationControls();
 }
 function showReading(focus = true) {
   state.reading = true;
@@ -325,7 +438,7 @@ function startReading() {
   const text = normalizeText($('source-text').value);
   if (!text.trim()) { message('Paste some Chinese text first, or try the sample.', true); $('source-text').focus(); return; }
   if (text.length > MAX_TEXT_LENGTH) { message('Please keep each reading under 30,000 characters.', true); return; }
-  if (text !== state.text) { state.pins = []; state.current = null; state.showPins = true; }
+  if (text !== state.text) { cancelTranslation({ quiet: true }); state.pins = []; state.current = null; state.showPins = true; state.translations = []; resetTranslationStatus(); }
   state.text = text; state.title = $('article-title').value.trim().slice(0, 120);
   selectionReset(); message(); persist(); showReading();
 }
@@ -338,18 +451,22 @@ function bindEvents() {
     $('article-title').value = '周末，城市慢了下来'; $('source-text').value = SAMPLE; updateCount(); $('source-text').focus();
   });
   $('edit-text').addEventListener('click', () => {
+    cancelTranslation({ quiet: true }); selectionReset(); resetTranslationStatus();
     state.reading = false; $('reading').hidden = true; $('editor').hidden = false; document.body.classList.remove('lookup-open');
     $('source-text').value = state.text; $('article-title').value = state.title; $('resume-reading').hidden = false; updateCount(); window.scrollTo({ top: 0 }); $('source-text').focus();
   });
   $('resume-reading').addEventListener('click', () => showReading());
   $('forget-reading').addEventListener('click', () => {
-    if (!window.confirm('Forget the reader’s saved text and pinned hints on this browser? Your flashcards are not affected.')) return;
+    if (!window.confirm('Forget the reader’s saved text, pinned hints, and translations on this browser? Your flashcards are not affected.')) return;
     try { localStorage.removeItem(KEY); } catch { message('This browser could not remove the saved reading.', true); return; }
-    Object.assign(state, { text: '', title: '', pins: [], current: null, pending: null, reading: false, showPins: true });
+    cancelTranslation({ quiet: true });
+    Object.assign(state, { text: '', title: '', pins: [], current: null, pending: null, reading: false, showPins: true, translations: [] });
+    selectionReset(); resetTranslationStatus();
     $('source-text').value = ''; $('article-title').value = ''; $('reading').hidden = true; $('editor').hidden = false;
     $('forget-reading').hidden = true; $('resume-reading').hidden = true; document.body.classList.remove('lookup-open'); updateCount(); message('Saved reading removed from this browser.');
   });
   $('article').addEventListener('click', (event) => {
+    if (event.target.closest('.translation-annotation')) return;
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && $('article').contains(selection.anchorNode)) { updateSelection(); return; }
     const word = event.target.closest('.word');
@@ -362,13 +479,22 @@ function bindEvents() {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
       event.preventDefault(); const words = [...$('article').querySelectorAll('.word')]; const index = words.indexOf(word);
       const next = words[index + (event.key === 'ArrowRight' ? 1 : -1)];
-      if (next) { lastWordFocus = Number(next.dataset.start); focusWord(lastWordFocus); }
+      if (next) {
+        lastWordFocus = Number(next.dataset.start);
+        // Split source fragments may share dictionary offsets; focus this DOM
+        // fragment rather than finding the first fragment of the original word.
+        for (const item of words) item.tabIndex = item === next ? 0 : -1;
+        next.focus({ preventScroll: true });
+      }
     }
   });
   document.addEventListener('selectionchange', () => { window.clearTimeout(selectionTimer); selectionTimer = window.setTimeout(updateSelection, 40); });
   $('article').addEventListener('pointerup', updateSelection);
   $('lookup-selection').addEventListener('mousedown', (event) => event.preventDefault());
   $('lookup-selection').addEventListener('click', () => { if (state.pending) choose(state.pending.start, state.pending.end); });
+  $('translate-selection').addEventListener('mousedown', (event) => event.preventDefault());
+  $('translate-selection').addEventListener('click', () => { void translateSelection(); });
+  $('cancel-translation').addEventListener('click', () => cancelTranslation());
   $('lookup-form').addEventListener('submit', (event) => { event.preventDefault(); search($('lookup-input').value); });
   $('close-lookup').addEventListener('click', () => closeLookup({ focus: !window.matchMedia('(max-width:850px)').matches }));
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.current && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) closeLookup({ focus: true }); });
@@ -389,6 +515,11 @@ function bindEvents() {
   for (const [id, delta] of [['font-smaller', -4], ['font-larger', 4]]) $(id).addEventListener('click', () => { state.fontSize = Math.max(22, Math.min(34, state.fontSize + delta)); renderArticle(); persist(); });
   $('retry-dictionary').addEventListener('click', () => loadDictionary());
   $('retry-levels').addEventListener('click', () => loadLevels());
+}
+function resetTranslationStatus() {
+  translationStatus(localTranslator.supported()
+    ? 'On-device Chinese → English. Select text, then Translate selection. First use downloads a language pack; no account, uploads, or API charges.'
+    : 'On-device translation is unavailable in this browser. Use a supported desktop Chrome browser. Dictionary, pinyin, and saved translations still work.');
 }
 function registerTools() {
   const context = document.modelContext || navigator.modelContext;
@@ -448,5 +579,7 @@ async function loadLevels() {
   return levelsPromise;
 }
 bindEvents();
+resetTranslationStatus();
+updateTranslationControls();
 void loadDictionary();
 void loadLevels();

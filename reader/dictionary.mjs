@@ -78,9 +78,18 @@ export function validSavedState(value) {
   for (const pin of pins.sort((a, b) => a.start - b.start)) {
     if (!nonoverlapping.length || nonoverlapping.at(-1).end <= pin.start) nonoverlapping.push(pin);
   }
+  const translations = [];
+  const boundary = (offset) => !(offset > 0 && offset < value.text.length && /[\uD800-\uDBFF]/u.test(value.text[offset - 1]) && /[\uDC00-\uDFFF]/u.test(value.text[offset]));
+  for (const item of (Array.isArray(value.translations) ? value.translations : []).slice(0, 100)) {
+    if (!item || !Number.isInteger(item.start) || !Number.isInteger(item.end) || item.start < 0 || item.end <= item.start || item.end > value.text.length || !boundary(item.start) || !boundary(item.end)) continue;
+    const source = value.text.slice(item.start, item.end);
+    if (!source.trim() || [...source].length > 1500 || item.source !== source || typeof item.english !== 'string' || !item.english.trim() || item.english.length > 20000) continue;
+    if (translations.some((previous) => previous.start < item.end && item.start < previous.end)) continue;
+    translations.push({ start: item.start, end: item.end, source, english: item.english, visible: item.visible !== false });
+  }
   return { text: value.text, title: typeof value.title === 'string' ? value.title.slice(0, 120) : '',
     fontSize: [22, 26, 30, 34].includes(value.fontSize) ? value.fontSize : 26,
-    pins: nonoverlapping, showPins: value.showPins !== false };
+    pins: nonoverlapping, showPins: value.showPins !== false, translations };
 }
 
 export function tokensWithOverrides(text, dictionary, ranges) {

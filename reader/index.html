@@ -8,8 +8,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Chinese Reader · Yiming’s Study Tools</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%231b6058'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='%23fffaf0'%3E读%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=2" />
-  <script type="module" src="./app.mjs?v=2"></script>
+  <link rel="stylesheet" href="./styles.css?v=3" />
+  <script type="module" src="./app.mjs?v=3"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to reader</a>
@@ -37,7 +37,7 @@
           <div class="guide-demo" aria-hidden="true"><span>慢</span><span class="demo-hint"><small>màn</small>慢</span><span>读</span></div>
           <h2>Less translating.<br />More reading.</h2>
           <ol><li><strong>Tap a word.</strong><span>See its pinyin. The rest of the text stays clean.</span></li><li><strong>Need the meaning?</strong><span>Reveal English definitions, or select a phrase to look it up.</span></li><li><strong>Keep a small hint.</strong><span>Pin pinyin above a word, then hide your hints to try again.</span></li></ol>
-          <p class="guide-note">A dictionary, not an automatic translator. No AI. No API keys. No usage charges.</p>
+          <p class="guide-note">Dictionary hints everywhere. Optional on-device translation in desktop Chrome—select just the text you need. No API keys or usage charges.</p>
         </aside>
       </div>
     </section>
@@ -50,10 +50,13 @@
             <div class="font-controls"><button id="font-smaller" type="button" aria-label="Smaller Chinese text">A−</button><span id="font-label">26 px</span><button id="font-larger" type="button" aria-label="Larger Chinese text">A+</button></div>
             <button id="toggle-hints" class="text-button" type="button" disabled>Hide hints</button>
             <button id="lookup-selection" class="selection-button" type="button" disabled>Look up selection</button>
+            <button id="translate-selection" class="selection-button translate-button" type="button" disabled aria-describedby="translation-status">Translate selection</button>
+            <button id="cancel-translation" class="text-button" type="button" hidden>Cancel translation</button>
           </div>
+          <p id="translation-status" class="translation-status" role="status" aria-live="polite"></p>
           <div class="paper">
             <div class="paper-meta"><span id="reading-count"></span><span>简体中文</span></div>
-            <p class="reading-instructions">Tap a word for pinyin. Drag to select a phrase, then choose “Look up selection.” On a phone, long-press to select.</p>
+            <p class="reading-instructions">Tap a word for pinyin. Drag across any text, then choose “Look up selection” or “Translate selection.” English appears above that text, with a show/hide toggle. On a phone, long-press for dictionary lookup; new translations require desktop Chrome.</p>
             <article id="article" lang="zh-Hans" aria-label="Chinese reading text" data-size="26"></article>
             <div class="paper-end"><span></span><span aria-hidden="true">读</span><span></span></div>
           </div>
@@ -86,7 +89,7 @@
       </div>
       <p class="reading-help">Keyboard: Tab into the text, use ← / → to move between words, Enter to look up, Esc to close. <span id="save-status">Saved on this device.</span></p>
     </section>
-    <footer><p>No login. No text uploads. Reading text and pins stay in this browser, not across devices. <button id="forget-reading" class="text-button" type="button" hidden>Forget saved reading</button></p><details><summary>Dictionary & credits</summary><p>Dictionary data: <a href="https://www.mdbg.net/chinese/dictionary?page=cc-cedict" target="_blank" rel="noopener noreferrer">CC-CEDICT / MDBG and contributors</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Reformatted for local lookup; original definitions preserved. <a href="./data/dictionary.json" download>Download dictionary data</a> · <a href="./data/NOTICE.txt">Attribution & changes</a>.</p><p>Word levels: <a href="https://github.com/drkameleon/complete-hsk-vocabulary" target="_blank" rel="noopener noreferrer">Complete HSK Vocabulary — Yanis Zafirópulos</a> (MIT). Frequency: <a href="https://github.com/rspeer/wordfreq" target="_blank" rel="noopener noreferrer">wordfreq — Robyn Speer</a> (data CC BY-SA 4.0), including freely available SUBTLEX-CH data by Cai & Brysbaert and other credited sources. <a href="./data/LEVELS-NOTICE.txt">Sources & methodology</a> · <a href="./data/levels.json" download>Download ratings & attribution</a>.</p></details></footer>
+    <footer><p>No login. No text uploads. Reading text, pins, and translations stay in this browser, not across devices. <button id="forget-reading" class="text-button" type="button" hidden>Forget saved reading</button></p><details><summary>Dictionary & credits</summary><p>Dictionary data: <a href="https://www.mdbg.net/chinese/dictionary?page=cc-cedict" target="_blank" rel="noopener noreferrer">CC-CEDICT / MDBG and contributors</a>, licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Reformatted for local lookup; original definitions preserved. <a href="./data/dictionary.json" download>Download dictionary data</a> · <a href="./data/NOTICE.txt">Attribution & changes</a>.</p><p>Word levels: <a href="https://github.com/drkameleon/complete-hsk-vocabulary" target="_blank" rel="noopener noreferrer">Complete HSK Vocabulary — Yanis Zafirópulos</a> (MIT). Frequency: <a href="https://github.com/rspeer/wordfreq" target="_blank" rel="noopener noreferrer">wordfreq — Robyn Speer</a> (data CC BY-SA 4.0), including freely available SUBTLEX-CH data by Cai & Brysbaert and other credited sources. <a href="./data/LEVELS-NOTICE.txt">Sources & methodology</a> · <a href="./data/levels.json" download>Download ratings & attribution</a>.</p><p>Optional machine translation runs locally using Chrome’s built-in Translator API and its downloaded Chinese–English language pack. Translations can be imperfect and are not dictionary definitions. No cloud translation fallback is used.</p></details></footer>
   </main>
   <noscript>This reader needs JavaScript for local dictionary lookup. Your text is not sent to a server.</noscript>
 </body>

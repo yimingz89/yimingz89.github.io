@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { Dictionary, pinyinMarks, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from '../reader/dictionary.mjs';
 import { WordLevels, frequencyBand } from '../reader/levels.mjs';
+import { MAX_TRANSLATION_LENGTH } from '../reader/translation.mjs';
 
 const rows = [
   ['银行', 'yin2 hang2', 'bank', '銀行'], ['银', 'yin2', 'silver', '銀'],
@@ -35,7 +36,8 @@ async function app(t, { stored, failFetch = false, failSave = false, mobile = fa
   let levelsFail = failLevels;
   let releaseLevels;
   const levelGate = deferLevels ? new Promise((resolve) => { releaseLevels = resolve; }) : Promise.resolve();
-  Object.assign(window, { Dictionary, WordLevels, frequencyBand, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides });
+  Object.assign(window, { Dictionary, WordLevels, frequencyBand, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides, MAX_TRANSLATION_LENGTH,
+    LocalTranslator: class { supported() { return false; } } });
   window.matchMedia = () => ({ matches: mobile });
   window.scrollTo = () => {};
   window.HTMLElement.prototype.scrollIntoView = () => {};
@@ -121,6 +123,31 @@ test('pinned / selected ranges preserve exact original text', () => {
   const tokens = tokensWithOverrides(text, fixture, [{ start: 2, end: 6 }]);
   assert.equal(tokens.map((token) => token.text).join(''), text);
   assert.ok(tokens.some((token) => token.text === '不约而同'));
+});
+
+test('saved translations reject mismatched, overlapping, huge, and half-surrogate ranges', () => {
+  const text = '银行𠮷学习';
+  const saved = validSavedState({ text, translations: [
+    { start: 0, end: 2, source: '银行', english: 'Bank', visible: false },
+    { start: 1, end: 2, source: '行', english: 'Overlapping' },
+    { start: 2, end: 3, source: text.slice(2, 3), english: 'Half character' },
+    { start: 4, end: 6, source: 'Wrong', english: 'Wrong source' },
+    { start: 4, end: 6, source: '学习', english: 'x'.repeat(20001) },
+    null,
+  ] });
+  assert.deepEqual(saved.translations, [{ start: 0, end: 2, source: '银行', english: 'Bank', visible: false }]);
+  assert.deepEqual(validSavedState({ text }).translations, []);
+});
+
+test('arrow navigation advances across fragments when a translation splits a dictionary word', async (t) => {
+  const a = await app(t, { stored: { text: '银行政府。', translations: [{ start: 1, end: 2, source: '行', english: 'Banking', visible: true }] } });
+  const words = [...a.get('article').querySelectorAll('.word')];
+  assert.equal(words[0].dataset.start, words[1].dataset.start);
+  words[0].focus();
+  words[0].dispatchEvent(new a.window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  assert.equal(a.window.document.activeElement, words[1]);
+  words[1].dispatchEvent(new a.window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  assert.equal(a.window.document.activeElement, words[2]);
 });
 
 test('paste and read is pinyin-free initially; tapping reveals pinyin before English', async (t) => {

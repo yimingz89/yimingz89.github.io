@@ -2,7 +2,7 @@
   "name": "hanzi-cloud-tests",
   "private": true,
   "scripts": {
-    "test": "node --test flashcards.test.cjs sync-state.test.mjs cloud-controller.test.mjs reader.test.mjs",
+    "test": "node --test flashcards.test.cjs sync-state.test.mjs cloud-controller.test.mjs reader.test.mjs translation-service.test.mjs reader-translation.test.mjs",
     "test:rules": "firebase emulators:exec --config ../firebase/firebase.json --project demo-hanzi-study --only firestore \"node --test cloud-rules.test.mjs\""
   },
   "devDependencies": {
