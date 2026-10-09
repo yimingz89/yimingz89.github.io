@@ -6,6 +6,7 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import { Dictionary, pinyinMarks, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from '../reader/dictionary.mjs';
 import { WordLevels, frequencyBand } from '../reader/levels.mjs';
 import { MAX_TRANSLATION_LENGTH } from '../reader/translation.mjs';
+import { getContextPinyin } from '../reader/pinyin.mjs';
 
 const rows = [
   ['银行', 'yin2 hang2', 'bank', '銀行'], ['银', 'yin2', 'silver', '銀'],
@@ -36,7 +37,7 @@ async function app(t, { stored, failFetch = false, failSave = false, mobile = fa
   let levelsFail = failLevels;
   let releaseLevels;
   const levelGate = deferLevels ? new Promise((resolve) => { releaseLevels = resolve; }) : Promise.resolve();
-  Object.assign(window, { Dictionary, WordLevels, frequencyBand, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides, MAX_TRANSLATION_LENGTH,
+  Object.assign(window, { Dictionary, WordLevels, frequencyBand, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides, MAX_TRANSLATION_LENGTH, getContextPinyin,
     LocalTranslator: class { supported() { return false; } } });
   window.matchMedia = () => ({ matches: mobile });
   window.scrollTo = () => {};
@@ -75,8 +76,19 @@ async function app(t, { stored, failFetch = false, failSave = false, mobile = fa
     },
     select(text) { return tools.get('look_up_reader_text').execute({ text }); },
     clickWord(text) {
-      const word = [...get('article').querySelectorAll('.word')].find((word) => word.querySelector('.source-text').textContent === text);
+      const word = [...get('article').querySelectorAll('.word')].find((word) => [...word.querySelectorAll('.source-text')].map((part) => part.textContent).join('') === text);
       assert.ok(word, `Word ${text} exists`); word.click();
+    },
+    selectRange(start, end) {
+      const spans = [...get('article').querySelectorAll('.source-text')];
+      const first = spans.find((node) => Number(node.dataset.start) <= start && Number(node.dataset.start) + node.textContent.length > start);
+      const last = spans.find((node) => Number(node.dataset.start) < end && Number(node.dataset.start) + node.textContent.length >= end);
+      assert.ok(first && last, `Source nodes exist for range ${start}–${end}`);
+      const range = window.document.createRange();
+      range.setStart(first.firstChild, start - Number(first.dataset.start));
+      range.setEnd(last.firstChild, end - Number(last.dataset.start));
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+      vm.runInContext('updateSelection()', context);
     },
     sourceText() { return [...get('article').querySelectorAll('.source-text')].map((node) => node.textContent).join(''); },
   };
@@ -150,7 +162,7 @@ test('arrow navigation advances across fragments when a translation splits a dic
   assert.equal(a.window.document.activeElement, words[2]);
 });
 
-test('paste and read is pinyin-free initially; tapping reveals pinyin before English', async (t) => {
+test('paste and read stays pinyin-free when a word opens its dictionary entry', async (t) => {
   const a = await app(t); a.open();
   assert.equal(a.get('reading').hidden, false);
   assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
@@ -158,28 +170,30 @@ test('paste and read is pinyin-free initially; tapping reveals pinyin before Eng
   assert.equal(a.get('lookup-pinyin').textContent, 'yín háng');
   assert.equal(a.get('meanings').hidden, true);
   assert.equal(a.get('meanings').textContent, '');
-  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 1);
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
   a.get('show-meaning').click();
   assert.equal(a.get('meanings').hidden, false);
   assert.match(a.get('meanings').textContent, /bank/);
   a.clickWord('政府');
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
   assert.equal(a.get('meanings').textContent, '');
   assert.equal(a.get('meanings').hidden, true);
   assert.deepEqual(a.errors, []);
 });
 
-test('pins survive reload and hide/show toggles without deleting pins', async (t) => {
-  const a = await app(t); a.open(); a.select('银行'); a.get('pin-hint').click();
+test('legacy pins remain saved without rendering inline hints or obsolete controls', async (t) => {
+  const pins = [{ start: 0, end: 2, pinyin: 'yín háng' }];
+  const a = await app(t, { stored: { text: '银行出台措施。', pins, showPins: true } });
   a.select('出台');
-  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 2);
-  a.get('toggle-hints').click();
   assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
-  assert.equal(a.get('pin-count').textContent, '1');
-  a.get('toggle-hints').click();
+  assert.equal(a.get('pin-hint'), null);
+  assert.equal(a.get('toggle-hints'), null);
+  a.get('font-larger').click();
+  assert.deepEqual(JSON.parse(a.window.localStorage.getItem(KEY)).pins, pins);
   const b = await app(t, { stored: a.window.localStorage.getItem(KEY) });
   assert.equal(b.get('reading').hidden, false);
-  assert.equal(b.get('pin-count').textContent, '1');
-  assert.equal(b.get('article').querySelector('.pronunciation').textContent, 'yín háng');
+  assert.equal(b.get('article').querySelectorAll('.pronunciation').length, 0);
+  assert.deepEqual(JSON.parse(b.window.localStorage.getItem(KEY)).pins, pins);
   assert.equal(b.get('lookup-result').hidden, true);
 });
 
@@ -191,20 +205,15 @@ test('phrase lookup uses exact entries or explicitly labeled component definitio
   assert.equal(a.get('breakdown').querySelectorAll('.definitions').length, 0);
   a.get('show-meaning').click();
   assert.match(a.get('breakdown').textContent, /government/);
-  assert.equal(a.get('pin-hint').disabled, true);
   a.select('不约而同');
   assert.equal(a.get('lookup-pinyin').textContent, 'bù yuē ér tóng');
-  assert.equal(a.get('pin-hint').disabled, false);
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
 });
 
-test('native phrase selection excludes displayed pinyin and preserves offsets', async (t) => {
-  const a = await app(t); a.open('银行出台措施。'); a.select('银行'); a.get('pin-hint').click();
-  const spans = [...a.get('article').querySelectorAll('.source-text')];
-  const start = spans.find((node) => node.textContent === '银行').firstChild;
-  const end = spans.find((node) => node.textContent === '措施').firstChild;
-  const range = a.window.document.createRange(); range.setStart(start, 0); range.setEnd(end, 2);
-  a.window.getSelection().removeAllRanges(); a.window.getSelection().addRange(range);
-  a.run('updateSelection()');
+test('native phrase selection excludes translation pinyin and preserves offsets', async (t) => {
+  const a = await app(t, { stored: { text: '银行出台措施。', translations: [{ start: 0, end: 2, source: '银行', english: 'bank', visible: true }] } });
+  assert.ok(a.get('article').querySelector('.pronunciation'));
+  a.selectRange(0, 6);
   assert.equal(a.get('lookup-selection').disabled, false);
   a.get('lookup-selection').click();
   assert.equal(a.get('lookup-word').textContent, '银行出台措施');
@@ -213,9 +222,7 @@ test('native phrase selection excludes displayed pinyin and preserves offsets', 
 
 test('native selection inside a compound looks up only the chosen character', async (t) => {
   const a = await app(t); a.open('银行。'); a.select('银行');
-  const node = a.get('article').querySelector('.source-text').firstChild;
-  const range = a.window.document.createRange(); range.setStart(node, 1); range.setEnd(node, 2);
-  a.window.getSelection().removeAllRanges(); a.window.getSelection().addRange(range); a.run('updateSelection()'); a.get('lookup-selection').click();
+  a.selectRange(1, 2); a.get('lookup-selection').click();
   assert.equal(a.get('lookup-word').textContent, '行');
   assert.equal(a.get('reading-choices').hidden, false);
   a.get('pronunciation-choice').value = '1';
@@ -223,24 +230,25 @@ test('native selection inside a compound looks up only the chosen character', as
   assert.equal(a.get('lookup-pinyin').textContent, 'xíng');
 });
 
-test('manual dictionary search is local and outside words cannot be pinned onto an article', async (t) => {
+test('manual dictionary search is local and does not add inline pinyin', async (t) => {
   const a = await app(t); a.open('政府。');
   a.get('lookup-input').value = '银行';
   a.get('lookup-form').dispatchEvent(new a.window.Event('submit', { cancelable: true }));
   assert.equal(a.get('lookup-word').textContent, '银行');
-  assert.equal(a.get('pin-hint').disabled, true);
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
   assert.deepEqual(a.requests, [{ url: './data/dictionary.json', options: undefined }, { url: './data/levels.json?v=1', options: undefined }]);
 });
 
-test('punctuation stays with words; repeated-word pins affect only the chosen occurrence', async (t) => {
+test('punctuation stays with words and dictionary lookup marks only the chosen occurrence', async (t) => {
   const a = await app(t); a.open('银行，银行。');
   assert.equal(a.get('article').querySelectorAll('.word-tail').length, 2);
   assert.equal(a.sourceText(), '银行，银行。');
   const words = a.get('article').querySelectorAll('.word'); words[1].click();
-  a.get('pin-hint').click(); a.get('close-lookup').click();
-  const pin = JSON.parse(a.window.localStorage.getItem(KEY)).pins[0];
-  assert.equal(pin.start, 3);
-  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 1);
+  assert.equal(a.get('article').querySelector('.word.is-active').dataset.start, '3');
+  assert.equal(a.get('article').querySelectorAll('.word.is-active').length, 1);
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
+  a.get('close-lookup').click();
+  assert.equal(a.get('article').querySelectorAll('.word.is-active').length, 0);
 });
 
 test('empty, excessive, and unknown text have safe, explicit outcomes', async (t) => {
@@ -250,7 +258,7 @@ test('empty, excessive, and unknown text have safe, explicit outcomes', async (t
   assert.match(a.get('app-message').textContent, /under 30,000/);
   a.open('𠮷。'); a.clickWord('𠮷');
   assert.match(a.get('breakdown').textContent, /No entry/);
-  assert.equal(a.get('pin-hint').disabled, true);
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
 });
 
 test('untrusted pasted HTML and titles are rendered as text, never as markup or network calls', async (t) => {
@@ -278,8 +286,8 @@ test('storage failure and dictionary fetch failure produce actionable messages',
 });
 
 test('new readings clear stale pins; forgetting the reader never touches flashcard storage', async (t) => {
-  const a = await app(t); a.open('银行。'); a.select('银行'); a.get('pin-hint').click();
-  a.open('政府。'); assert.equal(a.get('pin-count').textContent, '0');
+  const a = await app(t, { stored: { text: '银行。', pins: [{ start: 0, end: 2, pinyin: 'yín háng' }] } });
+  a.open('政府。'); assert.deepEqual(JSON.parse(a.window.localStorage.getItem(KEY)).pins, []);
   a.window.confirm = () => false; a.get('forget-reading').click();
   assert.ok(a.window.localStorage.getItem(KEY));
   a.window.confirm = () => true; a.get('forget-reading').click();
@@ -337,9 +345,9 @@ test('word levels are visible before English; advanced band and details are expl
   a.select('不约而同');
   assert.equal(a.get('level-details').open, false);
   assert.match(a.get('level-badges').textContent, /HSK 3.0 · 7–9/);
-  a.get('show-meaning').click(); a.get('pin-hint').click();
+  a.get('show-meaning').click();
   assert.match(a.get('level-badges').textContent, /Less common/);
-  assert.equal(a.get('pin-count').textContent, '1');
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
 });
 
 test('unlisted is not advanced, unknown frequency is not rare, and breakdowns rate their own words', async (t) => {
@@ -358,15 +366,17 @@ test('unlisted is not advanced, unknown frequency is not rare, and breakdowns ra
 });
 
 test('slow word-level loading does not block reading or change existing pins', async (t) => {
-  const a = await app(t, { deferLevels: true }); a.open('银行。'); a.select('银行');
+  const pins = [{ start: 0, end: 2, pinyin: 'yín háng' }];
+  const a = await app(t, { deferLevels: true, stored: { text: '银行。', pins } }); a.select('银行');
   assert.equal(a.get('start-reading').disabled, false);
   assert.match(a.get('level-status').textContent, /Loading word levels/);
-  a.get('pin-hint').click(); a.get('show-meaning').click();
+  a.get('show-meaning').click();
   const saved = a.window.localStorage.getItem(KEY);
   await a.finishLevels();
   assert.match(a.get('level-badges').textContent, /HSK 3.0 · 2/);
   assert.equal(a.get('meanings').hidden, false);
-  assert.equal(a.get('pin-count').textContent, '1');
+  assert.deepEqual(JSON.parse(a.window.localStorage.getItem(KEY)).pins, pins);
+  assert.equal(a.get('article').querySelectorAll('.pronunciation').length, 0);
   assert.equal(a.window.localStorage.getItem(KEY), saved);
 });
 

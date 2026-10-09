@@ -6,6 +6,7 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from '../reader/dictionary.mjs';
 import { WordLevels, frequencyBand } from '../reader/levels.mjs';
 import { MAX_TRANSLATION_LENGTH } from '../reader/translation.mjs';
+import { getContextPinyin } from '../reader/pinyin.mjs';
 
 const KEY = 'yiming-chinese-reader-v1';
 const rows = [
@@ -46,7 +47,7 @@ async function app(t, { stored, supported = true } = {}) {
   }
   Object.assign(window, {
     Dictionary, WordLevels, frequencyBand, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH,
-    MAX_TRANSLATION_LENGTH, LocalTranslator, hasHan, normalizeText, validSavedState, tokensWithOverrides,
+    MAX_TRANSLATION_LENGTH, LocalTranslator, hasHan, normalizeText, validSavedState, tokensWithOverrides, getContextPinyin,
   });
   window.matchMedia = () => ({ matches: false });
   window.scrollTo = () => {};
@@ -94,10 +95,11 @@ async function app(t, { stored, supported = true } = {}) {
     clearSelection() { window.getSelection().removeAllRanges(); },
     sourceText() { return [...get('article').querySelectorAll('.source-text')].map((node) => node.textContent).join(''); },
     annotations() { return [...get('article').querySelectorAll('.translation-span')]; },
+    visiblePinyin() { return [...get('article').querySelectorAll('.pronunciation')].filter((node) => !node.closest('[hidden]')).map((node) => node.textContent); },
   };
 }
 
-test('a native sentence selection receives a saved English annotation above its exact source', async (t) => {
+test('a native sentence selection receives English and per-character pinyin above its exact source', async (t) => {
   const a = await app(t); a.open();
   await a.translate(0, 7, 'The bank introduced measures.');
   assert.equal(a.calls.length, 1);
@@ -107,6 +109,11 @@ test('a native sentence selection receives a saved English annotation above its 
   assert.equal(annotation.querySelector('.translation-text').textContent, 'The bank introduced measures.');
   assert.equal(annotation.querySelector('.translation-source').querySelectorAll('.source-text').length > 0, true);
   assert.equal(annotation.firstElementChild.classList.contains('translation-annotation'), true);
+  assert.deepEqual(a.visiblePinyin(), ['yín', 'háng', 'chū', 'tái', 'cuò', 'shī']);
+  assert.deepEqual([...annotation.querySelectorAll('ruby.pinyin-character')].map((node) => [
+    node.querySelector('.source-text').textContent,
+    node.querySelector('rt.pronunciation').textContent,
+  ]), [['银', 'yín'], ['行', 'háng'], ['出', 'chū'], ['台', 'tái'], ['措', 'cuò'], ['施', 'shī']]);
   assert.deepEqual(a.saved().translations, [{ start: 0, end: 7, source: '银行出台措施。', english: 'The bank introduced measures.', visible: true }]);
   assert.equal(a.sourceText(), '银行出台措施。政府学习。');
   assert.deepEqual(a.errors, []);
@@ -149,7 +156,6 @@ test('translation selection is independent of the dictionary 120-character limit
 
 test('native selections crossing English and pinyin annotations retain original source offsets', async (t) => {
   const a = await app(t); a.open();
-  a.clearSelection(); a.get('article').querySelector('.word').click(); a.get('pin-hint').click();
   await a.translate(2, 6, 'Introduced measures');
   assert.ok(a.get('article').querySelector('.pronunciation'));
   await a.translate(0, 9, 'A longer translation');
@@ -160,26 +166,52 @@ test('native selections crossing English and pinyin annotations retain original 
   assert.equal(a.sourceText(), '银行出台措施。政府学习。');
 });
 
-test('partial-word translation keeps the selected character and pinyin controls functional', async (t) => {
+test('partial-word translation uses the surrounding article and stays independent of dictionary pronunciation choices', async (t) => {
   const a = await app(t); a.open('银行。');
   await a.translate(1, 2, 'business');
   assert.equal(a.saved().translations[0].source, '行');
   assert.equal(a.sourceText(), '银行。');
+  assert.deepEqual(a.visiblePinyin(), ['háng']);
   a.select(1, 2); a.get('lookup-selection').click();
   assert.equal(a.get('lookup-word').textContent, '行');
   assert.equal(a.get('lookup-pinyin').textContent, 'háng');
   a.get('pronunciation-choice').value = '1';
   a.get('pronunciation-choice').dispatchEvent(new a.window.Event('change'));
   assert.equal(a.get('lookup-pinyin').textContent, 'xíng');
-  a.get('pin-hint').click();
-  assert.equal(a.saved().pins[0].start, 1);
-  assert.equal(a.get('article').querySelector('.pronunciation').textContent, 'xíng');
+  assert.deepEqual(a.visiblePinyin(), ['háng'], 'Dictionary alternatives must not replace contextual translation pinyin');
   assert.equal(a.annotations().length, 1);
+});
+
+test('the same selected character gets different readings from the complete article context', async (t) => {
+  const a = await app(t); a.open('我在银行工作，然后步行回家。');
+  const text = a.sourceText();
+  const bank = text.indexOf('银行') + 1;
+  const walk = text.indexOf('步行') + 1;
+  await a.translate(bank, bank + 1, 'banking');
+  await a.translate(walk, walk + 1, 'walk');
+  assert.deepEqual(a.visiblePinyin(), ['háng', 'xíng']);
+  assert.deepEqual(a.calls.map((call) => call.text), ['行', '行']);
+  assert.equal(a.sourceText(), text);
+});
+
+test('dictionary lookup alone never reveals pinyin and closing lookup does not hide a translation', async (t) => {
+  const a = await app(t); a.open('银行学习。');
+  a.get('article').querySelector('.word').click();
+  assert.equal(a.get('lookup-pinyin').textContent, 'yín háng');
+  assert.deepEqual(a.visiblePinyin(), []);
+  a.get('close-lookup').click();
+  await a.translate(0, 2, 'bank');
+  a.clearSelection();
+  [...a.get('article').querySelectorAll('.word')].find((node) => node.dataset.start === '2').click();
+  assert.equal(a.get('lookup-word').textContent, '学习');
+  assert.deepEqual(a.visiblePinyin(), ['yín', 'háng']);
+  a.get('close-lookup').click();
+  assert.deepEqual(a.visiblePinyin(), ['yín', 'háng']);
+  assert.equal(a.get('article').querySelector('.translation-text').textContent, 'bank');
 });
 
 test('annotation text or pinyin alone cannot become translation source', async (t) => {
   const a = await app(t); a.open('银行。');
-  a.clearSelection(); a.get('article').querySelector('.word').click(); a.get('pin-hint').click();
   await a.translate(0, 2, 'bank');
   for (const selector of ['.translation-text', '.pronunciation']) {
     a.run('selectionReset()');
@@ -193,25 +225,90 @@ test('annotation text or pinyin alone cannot become translation source', async (
   assert.equal(a.calls.length, 1);
 });
 
-test('hide/show state survives reload and removing an annotation preserves source and pinyin', async (t) => {
+test('hide/show controls English and pinyin together across reload; removing clears both but keeps the source', async (t) => {
   const a = await app(t); a.open('银行。');
-  a.get('article').querySelector('.word').click(); a.get('pin-hint').click();
   await a.translate(0, 3, 'The bank.');
+  assert.deepEqual(a.visiblePinyin(), ['yín', 'háng']);
   a.clearSelection(); a.get('article').querySelector('.translation-toggle').click();
   assert.equal(a.saved().translations[0].visible, false);
   assert.equal(a.get('article').querySelector('.translation-toggle').textContent, 'Show translation');
+  assert.deepEqual(a.visiblePinyin(), []);
+  assert.equal(a.get('article').querySelector('.translation-text').hidden, true);
   const b = await app(t, { stored: a.window.localStorage.getItem(KEY) });
   assert.equal(b.calls.length, 0);
   assert.equal(b.get('article').querySelector('.translation-toggle').textContent, 'Show translation');
   assert.equal(b.saved().translations[0].visible, false);
+  assert.deepEqual(b.visiblePinyin(), []);
+  assert.equal(b.get('article').querySelector('.translation-text').hidden, true);
   b.get('article').querySelector('.translation-toggle').click();
   assert.equal(b.saved().translations[0].visible, true);
   assert.equal(b.get('article').querySelector('.translation-toggle').textContent, 'Hide translation');
+  assert.deepEqual(b.visiblePinyin(), ['yín', 'háng']);
+  assert.equal(b.get('article').querySelector('.translation-text').hidden, false);
   b.get('article').querySelector('.translation-remove').click();
   assert.deepEqual(b.saved().translations, []);
   assert.equal(b.annotations().length, 0);
   assert.equal(b.sourceText(), '银行。');
-  assert.equal(b.get('article').querySelector('.pronunciation').textContent, 'yín háng');
+  assert.deepEqual(b.visiblePinyin(), []);
+});
+
+test('legacy saved translations get contextual pinyin locally without a model or external network call', async (t) => {
+  const a = await app(t, { supported: false, stored: {
+    text: '银行，行走。',
+    pins: [{ start: 3, end: 4, pinyin: 'háng' }],
+    translations: [
+      { start: 1, end: 2, source: '行', english: 'banking', visible: true },
+      { start: 3, end: 4, source: '行', english: 'walk', visible: true },
+    ],
+  } });
+  assert.deepEqual(a.visiblePinyin(), ['háng', 'xíng'], 'Legacy word pins must not override context-derived pinyin');
+  assert.equal(a.calls.length, 0);
+  assert.deepEqual(a.requests.map((request) => request.url), ['./data/dictionary.json', './data/levels.json?v=1']);
+  a.get('article').querySelector('.translation-toggle').click();
+  await a.translate(1, 2);
+  assert.deepEqual(a.visiblePinyin(), ['háng', 'xíng']);
+  assert.equal(a.calls.length, 0, 'Showing a cached translation needs no Chrome translation model');
+});
+
+test('adjacent annotations toggle independently and retain visibility through dictionary and font rerenders', async (t) => {
+  const a = await app(t); a.open('银行学习。');
+  await a.translate(0, 2, 'bank');
+  await a.translate(2, 4, 'study');
+  a.clearSelection(); a.annotations()[0].querySelector('.translation-toggle').click();
+  assert.deepEqual(a.visiblePinyin(), ['xué', 'xí']);
+  assert.equal(a.annotations()[0].querySelector('.translation-text').hidden, true);
+  assert.equal(a.annotations()[1].querySelector('.translation-text').hidden, false);
+  a.get('font-larger').click();
+  a.get('article').querySelector('.word').click();
+  assert.deepEqual(a.visiblePinyin(), ['xué', 'xí']);
+  assert.deepEqual(a.saved().translations.map((item) => item.visible), [false, true]);
+  assert.equal(a.annotations()[0].querySelector('.translation-text').hidden, true);
+  assert.equal(a.annotations()[1].querySelector('.translation-text').hidden, false);
+  a.annotations()[1].querySelector('.translation-remove').click();
+  assert.deepEqual(a.visiblePinyin(), []);
+  assert.deepEqual(a.saved().translations.map((item) => item.visible), [false]);
+  assert.equal(a.sourceText(), '银行学习。');
+});
+
+test('mixed source text preserves UTF-16 offsets across pinyin, newlines, and supplementary characters', async (t) => {
+  const a = await app(t);
+  const text = 'AI 😀 银行，𠮷。\n政府';
+  a.open(text);
+  const bank = text.indexOf('银行');
+  await a.translate(bank + 1, bank + 2, 'banking');
+  assert.deepEqual(a.visiblePinyin(), ['háng']);
+  a.select(0, text.length);
+  assert.equal(a.get('translate-selection').textContent, `Translate selection (${[...text].length})`);
+  await a.run('translateSelection()');
+  assert.equal(a.calls[1].text, text);
+  assert.equal(a.saved().translations[0].end, text.length);
+  assert.equal(a.sourceText(), text);
+  assert.deepEqual(a.visiblePinyin(), ['yín', 'háng', 'zhèng', 'fǔ']);
+  const uncommon = text.indexOf('𠮷');
+  a.select(uncommon + 1, uncommon + 2);
+  await a.run('translateSelection()');
+  assert.equal(a.calls[2].text, '𠮷', 'A DOM range inside a surrogate pair must expand to the complete source character');
+  assert.equal(a.sourceText(), text);
 });
 
 test('reselecting an exact saved range reuses its translation without another model call', async (t) => {
@@ -223,6 +320,7 @@ test('reselecting an exact saved range reuses its translation without another mo
   assert.equal(a.annotations().length, 1);
   assert.equal(a.saved().translations[0].visible, true);
   assert.equal(a.get('article').querySelector('.translation-text').textContent, 'Saved translation');
+  assert.deepEqual(a.visiblePinyin(), ['yín', 'háng', 'chū', 'tái', 'cuò', 'shī']);
 });
 
 test('disjoint translations coexist and overlapping ones are replaced only when the new translation succeeds', async (t) => {

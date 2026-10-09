@@ -85,8 +85,8 @@ button.secondary:not(:disabled):hover,.selection-button:not(:disabled):hover { b
 .word-tail { display:inline-block; max-width:100%; }
 .word:hover { background:#f0f0dd; }
 .word.is-active { background:#e0ece1; box-shadow:0 2px 0 #2b7563; }
-.word.is-pinned:not(.is-active) { box-shadow:0 1px 0 #caaa7e; }
-.pronunciation { position:absolute; left:50%; bottom:100%; transform:translateX(-50%); font:500 11px/1.15 ui-sans-serif,system-ui,sans-serif; color:var(--accent); white-space:nowrap; pointer-events:none; user-select:none; -webkit-user-select:none; }
+.pinyin-character { display:inline-flex; flex-direction:column-reverse; align-items:center; min-width:1em; padding:0 .07em; vertical-align:bottom; line-height:1.65; }
+.pronunciation { font:500 12px/1.3 ui-sans-serif,system-ui,sans-serif; color:var(--accent); white-space:nowrap; pointer-events:none; user-select:none; -webkit-user-select:none; }
 .translation-span { display:inline-block; min-width:5.5em; max-width:100%; vertical-align:bottom; margin:.2em .06em; border-bottom:2px solid #b7ccb8; border-radius:5px 5px 0 0; background:#eaf1e747; }
 .translation-annotation { display:block; contain:inline-size; padding:.45rem .55rem .15rem; font:400 13px/1.5 ui-sans-serif,system-ui,sans-serif; color:var(--green); white-space:normal; overflow-wrap:anywhere; user-select:none; -webkit-user-select:none; }
 .translation-text { display:block; max-width:48ch; }
@@ -94,7 +94,8 @@ button.secondary:not(:disabled):hover,.selection-button:not(:disabled):hover { b
 .translation-actions button { background:none; border:0; color:var(--green); padding:.3rem 0; min-height:28px; font-size:10px; line-height:1.4; }
 .translation-toggle { text-decoration:underline; text-underline-offset:3px; }
 .translation-actions .translation-remove { padding:.2rem .35rem; font-size:17px; color:var(--muted); }
-.translation-source { display:block; padding:.45em .12em 0; white-space:pre-wrap; }
+.translation-source { display:block; padding:.6em .12em 0; white-space:pre-wrap; }
+.translation-source .word { line-height:2.1; }
 .paper-end { display:flex; align-items:center; gap:1rem; justify-content:center; margin-top:2.8rem; color:#c1c9b9; font:1.2rem "Songti SC",serif; }
 .paper-end span:first-child,.paper-end span:last-child { width:30px; height:1px; background:#e1e5d6; }
 .lookup-panel { position:sticky; top:1.1rem; padding:1.35rem; border:1px solid var(--line); background:#fcfcf6; border-radius:12px; max-height:calc(100dvh - 2.2rem); overflow:auto; }
@@ -135,14 +136,7 @@ button.secondary:not(:disabled):hover,.selection-button:not(:disabled):hover { b
 .part-button { border:0; background:none; color:var(--green); font-size:1.1rem; padding:0; margin-right:.8rem; }
 .part-pinyin { color:var(--accent); font-size:.78rem; }
 .breakdown-item .definitions { font-size:.79rem; margin-top:.65rem; line-height:1.6; }
-.pins-disclosure { border-top:1px solid var(--line); margin-top:1.4rem; padding-top:1.1rem; font-size:.76rem; }
 summary { cursor:pointer; line-height:1.6; }
-#pin-count { color:var(--green); background:#e6eddf; border-radius:12px; padding:.08rem .45rem; margin-left:.2rem; font-size:.65rem; }
-#pin-list { padding:0; list-style:none; }
-#pin-list li { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #e9ebdf; padding:.45rem 0; gap:.5rem; }
-.pinned-link { border:0; background:none; color:var(--green); font-size:.85rem; text-align:left; }
-.pinned-link small { display:block; color:var(--accent); font-size:.66rem; margin-top:.2rem; }
-.unpin-button { border:0; background:none; color:var(--muted); font-size:1rem; padding:.5rem; }
 .dictionary-note { font-size:.64rem; line-height:1.65; color:#8a9587; margin:1.3rem 0 0; }
 .reading-help { font-size:.68rem; color:var(--muted); line-height:1.8; margin-top:1.4rem; }
 #save-status { margin-left:.5rem; }
@@ -163,7 +157,7 @@ footer .text-button { font-size:inherit; margin-left:.5rem; }
   .has-lookup .lookup-form { display:none; }
   .has-lookup .panel-top { margin-bottom:.6rem; }
   .has-lookup #lookup-word { font-size:1.65rem; }
-  .has-lookup .pins-disclosure,.has-lookup .dictionary-note { display:none; }
+  .has-lookup .dictionary-note { display:none; }
   body.lookup-open { padding-bottom:43dvh; }
   footer { flex-direction:column; gap:.5rem; }
   footer>p { max-width:none; }

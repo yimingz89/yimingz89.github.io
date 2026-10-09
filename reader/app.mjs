@@ -1,6 +1,7 @@
-import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState, tokensWithOverrides } from './dictionary.mjs?v=3';
+import { Dictionary, MAX_TEXT_LENGTH, MAX_SELECTION_LENGTH, hasHan, normalizeText, validSavedState } from './dictionary.mjs?v=3';
 import { WordLevels, frequencyBand } from './levels.mjs';
 import { LocalTranslator, MAX_TRANSLATION_LENGTH } from './translation.mjs?v=1';
+import { getContextPinyin } from './pinyin.mjs?v=1';
 
 const $ = (id) => document.getElementById(id);
 const KEY = 'yiming-chinese-reader-v1';
@@ -24,9 +25,7 @@ function el(tag, text, className) {
 function message(text = '', error = false) { $('app-message').textContent = text; $('app-message').dataset.error = String(error); }
 function overlapping(a, b) { return a.start < b.end && b.start < a.end; }
 function inArticle(lookup) { return lookup && lookup.start >= 0 && state.text.slice(lookup.start, lookup.end) === lookup.text; }
-function pinnable(lookup = state.current) { return inArticle(lookup) && lookup.exact.length > 0 && !lookup.characters && lookup.text.length <= 12; }
 function activeEntry() { return state.current?.exact[state.current.reading || 0]; }
-function currentPin() { return state.current && state.pins.find((pin) => pin.start === state.current.start && pin.end === state.current.end); }
 
 function persist() {
   try {
@@ -44,8 +43,8 @@ function restore() {
     const saved = validSavedState(JSON.parse(raw));
     if (!saved) { message('The saved reading could not be restored. Paste your text to start a new reading.', true); return; }
     Object.assign(state, saved);
-    // Only restore pins backed by an actual dictionary reading.
-    state.pins = state.pins.filter((pin) => state.dictionary.lookup(state.text.slice(pin.start, pin.end)).some((entry) => entry.pinyin === pin.pinyin));
+    // Keep legacy pins in storage, but pronunciation is now shown only as part
+    // of a translation. Old dictionary pins must not override contextual pinyin.
     $('source-text').value = state.text;
     $('article-title').value = state.title;
     updateCount();
@@ -89,7 +88,7 @@ async function translateSelection() {
   if (cached) {
     cached.visible = true;
     selectionReset(); persist(); renderArticle();
-    translationStatus('Showing the saved translation. No new translation was needed.');
+    translationStatus('Showing saved English and contextual pinyin. No new translation was needed.');
     return;
   }
   if (!localTranslator.supported()) { translationStatus('On-device translation needs a supported desktop Chrome browser. Dictionary and pinyin still work; no text is uploaded.', true); return; }
@@ -110,7 +109,7 @@ async function translateSelection() {
     state.translations = state.translations.filter((item) => !overlapping(item, request));
     state.translations.push({ start, end, source, english: english.trim(), visible: true });
     selectionReset(); persist(); renderArticle();
-    translationStatus('Translation shown above your selection. Use Hide translation to test your reading. Machine translations can be imperfect.');
+    translationStatus('English and pinyin shown above your selection. Hide translation hides both. Pronunciation uses the surrounding text; names and ambiguous readings can still be imperfect.');
   } catch (error) {
     if (translationRequest === request) translationStatus(error.name === 'AbortError' ? 'Translation canceled.' : error.message || 'On-device translation failed. Please try again.', error.name !== 'AbortError');
   } finally {
@@ -123,9 +122,7 @@ function choose(start, end, { focus = false } = {}) {
   selectionReset();
   $('level-details').open = false;
   const selected = state.dictionary.selection(text, start);
-  const pin = state.pins.find((item) => item.start === start && item.end === end);
-  const reading = pin ? Math.max(0, selected.exact.findIndex((entry) => entry.pinyin === pin.pinyin)) : 0;
-  state.current = { ...selected, meaning: false, reading, characters: false };
+  state.current = { ...selected, meaning: false, reading: 0, characters: false };
   message();
   renderArticle();
   renderLookup();
@@ -161,19 +158,34 @@ function focusWord(start) {
   target?.focus({ preventScroll: true });
 }
 function renderArticle() {
-  const active = pinnable() ? state.current : null;
-  const overrides = state.pins.filter((pin) => !active || !overlapping(pin, active));
-  if (active) overrides.push(active);
-  const tokens = tokensWithOverrides(state.text, state.dictionary, overrides);
+  const tokens = state.dictionary.segment(state.text);
   const fragment = document.createDocumentFragment();
   let firstWord = true;
-  function appendTokens(parent, start, end) {
+  function appendTokens(parent, start, end, translation = null) {
+  // Compute from the surrounding reading, not from individual dictionary words
+  // or the selected substring. Only render syllables inside this annotation.
+  const pronunciations = translation ? new Map(getContextPinyin(state.text, start, end).map((part) => [part.start, part])) : null;
+  function appendSource(parent, token) {
+    let offset = token.start;
+    for (const text of token.text) {
+      const source = el('span', text, 'source-text');
+      source.dataset.start = String(offset);
+      const reading = pronunciations?.get(offset)?.pinyin;
+      if (reading) {
+        const ruby = el('ruby', undefined, 'pinyin-character');
+        const hint = el('rt', reading, 'pronunciation');
+        hint.lang = 'zh-Latn-pinyin';
+        hint.hidden = !translation.visible;
+        hint.setAttribute('aria-hidden', 'true');
+        ruby.append(source, hint); parent.append(ruby);
+      } else parent.append(source);
+      offset += text.length;
+    }
+  }
   for (const original of tokens) {
     if (original.end <= start || original.start >= end) continue;
     const token = { ...original, start: Math.max(start, original.start), end: Math.min(end, original.end) };
     token.text = state.text.slice(token.start, token.end);
-    const source = el('span', token.text, 'source-text');
-    source.dataset.start = String(token.start);
     if (!token.interactive) {
       // Keep closing punctuation with the preceding word at narrow widths.
       const previous = parent.lastElementChild;
@@ -182,8 +194,8 @@ function renderArticle() {
         if (previous.matches('.word')) {
           group = el('span', undefined, 'word-tail'); previous.replaceWith(group); group.append(previous);
         }
-        group.append(source);
-      } else parent.append(source);
+        appendSource(group, token);
+      } else appendSource(parent, token);
       continue;
     }
     const word = el('span', undefined, 'word');
@@ -193,26 +205,9 @@ function renderArticle() {
     word.tabIndex = firstWord ? 0 : -1;
     firstWord = false;
     const selected = inArticle(state.current) && token.start < state.current.end && token.end > state.current.start;
-    const pin = state.pins.find((item) => item.start === original.start && item.end === original.end);
     word.classList.toggle('is-active', !!selected);
-    word.classList.toggle('is-pinned', !!pin && state.showPins);
-    let reading = active && original.start === active.start && original.end === active.end
-      ? activeEntry()?.pinyin : state.showPins && pin ? pin.pinyin : '';
-    // A translation can begin inside a dictionary word. Keep word lookup intact,
-    // while displaying only the matching pinyin syllables on each split piece.
-    if (reading && (token.start !== original.start || token.end !== original.end)) {
-      const syllables = reading.split(/\s+/u);
-      reading = syllables.length === [...original.text].length
-        ? syllables.slice([...state.text.slice(original.start, token.start)].length, [...state.text.slice(original.start, token.end)].length).join(' ')
-        : token.start === original.start ? reading : '';
-    }
-    word.append(source);
-    if (reading) {
-      const hint = el('span', reading, 'pronunciation');
-      hint.setAttribute('aria-hidden', 'true');
-      word.append(hint);
-    }
-    word.setAttribute('aria-label', reading ? `${token.text} · ${reading}` : token.text);
+    appendSource(word, token);
+    word.setAttribute('aria-label', token.text);
     word.setAttribute('aria-pressed', String(!!selected));
     parent.append(word);
   }
@@ -232,6 +227,7 @@ function renderArticle() {
     toggle.type = 'button'; toggle.setAttribute('aria-expanded', String(item.visible)); toggle.setAttribute('aria-controls', english.id);
     toggle.addEventListener('click', () => {
       item.visible = !item.visible; english.hidden = !item.visible;
+      for (const hint of original.querySelectorAll('.pronunciation')) hint.hidden = !item.visible;
       toggle.textContent = item.visible ? 'Hide translation' : 'Show translation';
       toggle.setAttribute('aria-expanded', String(item.visible)); persist();
     });
@@ -243,7 +239,10 @@ function renderArticle() {
     });
     controls.append(toggle, remove); annotation.append(english, controls);
     const original = el('span', undefined, 'translation-source');
-    appendTokens(original, item.start, item.end);
+    original.id = `translation-source-${item.start}-${item.end}`;
+    toggle.setAttribute('aria-controls', `${english.id} ${original.id}`);
+    toggle.title = 'Show or hide English and pinyin together';
+    appendTokens(original, item.start, item.end, item);
     group.append(annotation, original); fragment.append(group);
     cursor = item.end;
   }
@@ -253,8 +252,6 @@ function renderArticle() {
   $('font-label').textContent = `${state.fontSize} px`;
   $('font-smaller').disabled = state.fontSize === 22;
   $('font-larger').disabled = state.fontSize === 34;
-  $('toggle-hints').disabled = !state.current && !state.pins.length;
-  $('toggle-hints').textContent = state.current || (state.showPins && state.pins.length) ? 'Hide hints' : 'Show pinned hints';
 }
 function definitions(entries, parent) {
   const list = el('ol', undefined, 'definitions');
@@ -322,7 +319,7 @@ function renderLookup() {
     });
     $('pronunciation-choice').value = String(current.reading);
     $('lookup-note').textContent = exact
-      ? current.exact.length > 1 ? 'More than one dictionary reading. Choose the one that fits; this reader does not infer context.' : 'Try recalling the meaning before revealing it.'
+      ? current.exact.length > 1 ? 'Dictionary alternatives are listed here. Use Translate selection for inline pinyin chosen from the surrounding text.' : 'Try recalling the meaning before revealing it.'
       : current.characters ? 'Character meanings do not always add up to the meaning of the whole word.' : 'No exact dictionary entry for this selection. These are individual word lookups—not a sentence translation.';
     $('show-meaning').textContent = current.meaning ? 'Hide meaning' : exact ? 'Show meaning' : 'Show meanings';
     $('show-meaning').setAttribute('aria-expanded', String(current.meaning));
@@ -330,10 +327,6 @@ function renderLookup() {
     $('character-mode').hidden = !hasHan(current.text) || [...current.text].length < 2;
     $('character-mode').textContent = current.characters ? 'Back to word / phrase' : 'Look at individual characters';
     $('character-mode').setAttribute('aria-pressed', String(current.characters));
-    $('pin-hint').disabled = !pinnable();
-    $('pin-hint').title = pinnable() ? 'Keep pinyin above this occurrence' : 'Pin an exact dictionary word or short phrase (up to 12 characters) in the article';
-    $('pin-hint').textContent = currentPin() ? 'Unpin pinyin' : 'Pin pinyin';
-    $('pin-hint').setAttribute('aria-pressed', String(!!currentPin()));
     if (exact && current.meaning) definitions([activeEntry()], $('meanings'));
     if (!exact) {
       const parts = lookupParts();
@@ -355,24 +348,6 @@ function renderLookup() {
       }
     }
   }
-  renderPins();
-}
-function renderPins() {
-  $('pin-count').textContent = String(state.pins.length);
-  $('pins-empty').hidden = state.pins.length > 0;
-  $('pin-list').replaceChildren();
-  for (const pin of state.pins.slice().sort((a, b) => a.start - b.start)) {
-    const text = state.text.slice(pin.start, pin.end);
-    const row = el('li');
-    const button = el('button', text, 'pinned-link');
-    button.type = 'button';
-    button.append(el('small', pin.pinyin));
-    button.addEventListener('click', () => { choose(pin.start, pin.end); $('article').querySelector(`.word[data-start="${pin.start}"]`)?.scrollIntoView({ block: 'center' }); });
-    const remove = el('button', '×', 'unpin-button');
-    remove.type = 'button'; remove.setAttribute('aria-label', `Unpin ${text}`);
-    remove.addEventListener('click', () => { state.pins = state.pins.filter((item) => item !== pin); persist(); renderArticle(); renderLookup(); });
-    row.append(button, remove); $('pin-list').append(row);
-  }
 }
 function closeLookup({ focus = false } = {}) {
   const start = state.current?.start ?? lastWordFocus;
@@ -380,20 +355,8 @@ function closeLookup({ focus = false } = {}) {
   selectionReset(); renderArticle(); renderLookup();
   if (focus) focusWord(start);
 }
-function togglePin() {
-  if (!pinnable()) return;
-  const pin = currentPin();
-  if (pin) state.pins = state.pins.filter((item) => item !== pin);
-  else {
-    state.pins = state.pins.filter((item) => !overlapping(item, state.current));
-    state.pins.push({ start: state.current.start, end: state.current.end, pinyin: activeEntry().pinyin });
-    state.showPins = true;
-  }
-  persist(); renderArticle(); renderLookup();
-}
-
 // Count only original source spans in a DOM selection; visible pinyin is never
-// copied into the lookup, even when a selection crosses a pinned annotation.
+// copied into the lookup, even when a selection crosses a translation annotation.
 function sourceOffset(container, offset) {
   const range = document.createRange();
   range.selectNodeContents($('article'));
@@ -499,18 +462,11 @@ function bindEvents() {
   $('close-lookup').addEventListener('click', () => closeLookup({ focus: !window.matchMedia('(max-width:850px)').matches }));
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && state.current && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) closeLookup({ focus: true }); });
   $('show-meaning').addEventListener('click', () => { if (state.current) { state.current.meaning = !state.current.meaning; renderLookup(); } });
-  $('pin-hint').addEventListener('click', togglePin);
   $('character-mode').addEventListener('click', () => { if (state.current) { state.current.characters = !state.current.characters; state.current.meaning = false; renderArticle(); renderLookup(); } });
   $('pronunciation-choice').addEventListener('change', () => {
     if (!state.current) return;
     state.current.reading = Number($('pronunciation-choice').value);
-    const pin = currentPin(); if (pin) { pin.pinyin = activeEntry().pinyin; persist(); }
     renderArticle(); renderLookup();
-  });
-  $('toggle-hints').addEventListener('click', () => {
-    if (state.current || (state.showPins && state.pins.length)) { state.current = null; state.showPins = false; }
-    else state.showPins = true;
-    selectionReset(); persist(); renderArticle(); renderLookup();
   });
   for (const [id, delta] of [['font-smaller', -4], ['font-larger', 4]]) $(id).addEventListener('click', () => { state.fontSize = Math.max(22, Math.min(34, state.fontSize + delta)); renderArticle(); persist(); });
   $('retry-dictionary').addEventListener('click', () => loadDictionary());
@@ -518,7 +474,7 @@ function bindEvents() {
 }
 function resetTranslationStatus() {
   translationStatus(localTranslator.supported()
-    ? 'On-device Chinese → English. Select text, then Translate selection. First use downloads a language pack; no account, uploads, or API charges.'
+    ? 'Select text, then Translate selection for English + contextual pinyin. Both stay on your device. First use downloads Chrome’s language pack; no account or API charges.'
     : 'On-device translation is unavailable in this browser. Use a supported desktop Chrome browser. Dictionary, pinyin, and saved translations still work.');
 }
 function registerTools() {
